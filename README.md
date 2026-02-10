@@ -13,12 +13,12 @@ Build a fully functional neural network without using deep learning frameworks (
 - Pure Python and Numpy implementation
 - Forward propagation
 - Backpropagation algorithm
-- Multiple activation functions 
-- Multiple loss functions 
-- Stochastic gradient descent optimiser 
-- MNIST digit classifier 
+- Multiple activation functions
+- Multiple loss functions
+- Stochastic gradient descent optimiser
+- MNIST digit classifier
 
 
-## References 
+## References
 
 - Goodfellow, I., Bengio, Y., & Courville, A. (2016). *Deep Learning*. MIT Press. http://www.deeplearningbook.org/
