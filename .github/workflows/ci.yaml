@@ -9,8 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/astral-sh/uv:latest
 
     steps:
       - name: Checkout code
