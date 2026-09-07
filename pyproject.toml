@@ -5,12 +5,18 @@ description = "A feed-forward neural network implmentation built from scratch in
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "loguru>=0.7.3",
+    "matplotlib>=3.11.1",
     "numpy>=2.4.2",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
 ]
 
 [dependency-groups]
 dev = [
     "black>=26.1.0",
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
