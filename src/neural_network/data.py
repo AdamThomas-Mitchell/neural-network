@@ -1,51 +1,78 @@
 import shutil
 from pathlib import Path
-from urllib.error import ContentTooShortError, HTTPError, URLError
+from urllib.error import URLError
 from urllib.request import urlopen
 
 from loguru import logger
 
-from neural_network.errors import DownloadError, WriteError
+from neural_network.errors import DeleteError, DownloadError, ReadError, WriteError
 
 
-def _verify_full_file_download(url: str, downloaded_filepath: Path) -> None:
-    """Check downloaded file is same size as file at the URL path.
+def _delete_file(filepath: Path) -> None:
+    """Delete a file at a given path.
 
     Args:
-        url (str): URL path for file to download.
-        downloaded_filepath (Path): Path to where the file was downloaded.
+        filepath (Path): Path to file to delete.
 
     Raises:
-        DownloadError: If the downloaded file is not the same size as the file at the
-            URL path.
+        DeleteError: If there is an error when attempting to delete the file.
     """
-    # TODO refine
-
-    expected_file_size: int | None = None
-    with urlopen(url, timeout=10) as response:  # TODO: try-except block here maybe
-        if response.has_header("Content-Length"):
-            expected_file_size = int(response.get_header("Content-Length"))
-
-    actual_file_size: int = downloaded_filepath.stat().st_size
-    if expected_file_size and actual_file_size != expected_file_size:
-        logger.warning(f"Incomplete file download from {url} to {downloaded_filepath}")
-        raise DownloadError(f"Failed to download file at {url}")
-
-    logger.info(f"Verified full download from {url} to {downloaded_filepath}")
+    try:
+        if filepath.exists():
+            filepath.unlink()
+            logger.info(f"Deleted file at {filepath}")
+    except OSError as ex:
+        logger.warning(f"Error deleting file at {filepath}: {ex}")
+        raise DeleteError from ex
 
 
-def _verify_downloaded_file_integrity(url: str, downloaded_filepath: Path) -> None:
+def _verify_full_file_download(
+    downloaded_filepath: Path, expected_file_size: int
+) -> None:
+    """Check downloaded file is the correct size.
+
+    Args:
+        downloaded_filepath (Path): Path to where the file was downloaded.
+        expected_file_size (int): Expected size of the file.
+
+    Raises:
+        DownloadError: If the downloaded file is not the correct size.
+    """
+    actual_file_size: int | None = None
+    try:
+        if downloaded_filepath.exists():
+            actual_file_size = downloaded_filepath.stat().st_size
+    except OSError as ex:
+        logger.warning(
+            f"Error occurred while fetching file size from {downloaded_filepath}: {ex}"
+        )
+        raise ReadError from ex
+
+    if (
+        expected_file_size is not None
+        and actual_file_size is not None
+        and actual_file_size != expected_file_size
+    ):
+        logger.warning(f"Incomplete file download from to {downloaded_filepath}")
+        _delete_file(downloaded_filepath)
+        raise DownloadError(f"Failed to download file to {downloaded_filepath}")
+
+
+def _verify_downloaded_file_integrity(
+    downloaded_filepath: Path, expected_checksum: str
+) -> None:
     # TODO
     pass
 
 
-def download_file(url: str, output_filepath: Path, overwrite: bool = False) -> None:
+def _download_file(url: str, output_filepath: Path, overwrite: bool = False) -> None:
     """Download a file from a given URL to a local directory path.
 
     Args:
         url (str): URL path of the file to download.
         output_filepath (Path): Path to downloaded file.
-        overwrite (bool, optional): Whether existing file should be overwritten. Defaults to False.
+        overwrite (bool, optional): Whether existing file should be overwritten.
+            Defaults to False.
 
     Raises:
         DownloadError: If there is an error when attempting file download.
@@ -62,17 +89,23 @@ def download_file(url: str, output_filepath: Path, overwrite: bool = False) -> N
             open(output_filepath, "wb") as out_file,
         ):
             shutil.copyfileobj(response, out_file)
-            logger.info(f"Successfully downloaded file from {url} to {output_filepath}")
+
+            expected_file_size: int | None = None
+            if url_file_size := response.getheader("Content-Length"):
+                expected_file_size = int(url_file_size)
+
     except (URLError, TimeoutError) as ex:
         logger.warning(f"Error downloading file from {url}: {ex}")
-        if output_filepath.exists():
-            output_filepath.unlink()
+        _delete_file(output_filepath)
         raise DownloadError from ex
     except OSError as ex:
         logger.warning(f"Error writing file to {output_filepath}: {ex}")
-        if output_filepath.exists():
-            output_filepath.unlink()
+        _delete_file(output_filepath)
         raise WriteError from ex
+
+    if expected_file_size:
+        _verify_full_file_download(output_filepath, expected_file_size)
+    logger.info(f"Successfully downloaded file from {url} to {output_filepath}")
 
 
 def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> None:
@@ -98,39 +131,26 @@ def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> Non
         "t10k-labels-idx1-ubyte.gz",
     }
 
-    # Validate output path is valid directory
     if not output_dirpath.exists() or not output_dirpath.is_dir():
         logger.error(f"{output_dirpath} is not a valid directory")
         raise NotADirectoryError(f"{output_dirpath} is not a valid directory")
 
-    # Optionally, overwrite existing MNIST files
-    gz_files = set(f.name for f in output_dirpath.glob("*.gz") if f.is_file())
-    existing_files: set[str] = files & gz_files
-    if existing_files and overwrite:
-        logger.info(f"Overwriting the following existing files: {str(existing_files)}")
-    else:
-        files = files - existing_files
-
     # Download files
-    # TODO redo this block
     downloaded_files: set[str] = set()
     for file_name in files:
         for mirror in mirrors:
             try:
                 file_url: str = mirror + file_name
                 output_filepath: Path = output_dirpath / file_name
-                download_file(file_url, output_filepath)
+                _download_file(file_url, output_filepath, overwrite=overwrite)
                 downloaded_files.add(file_name)
-                logger.info(
-                    f"Downloaded file from {file_url} and saved to {str(output_dirpath)}"
-                )
                 break
-            # TODO: Raise custom error here
-            except (HTTPError, ContentTooShortError, URLError, TimeoutError) as ex:
-                logger.warning(ex)
+            except DownloadError as ex:
+                logger.warning(f"Failed to download {file_name} from {mirror}: {ex}")
 
-    # Verify files downloaded
     if downloaded_files != files:
         failed = files - downloaded_files
         logger.error(f"Failed to download the following file(s): {str(failed)}")
-        raise DownloadError(f"Failed to download the following files: {str(failed)}")
+        raise FileNotFoundError(
+            f"Failed to download the following file(s): {str(failed)}"
+        )
