@@ -5,7 +5,7 @@ from urllib.request import urlopen
 
 from loguru import logger
 
-from neural_network.errors import DownloadError
+from neural_network.errors import DownloadError, WriteError
 
 
 def _verify_full_file_download(url: str, downloaded_filepath: Path) -> None:
@@ -19,6 +19,8 @@ def _verify_full_file_download(url: str, downloaded_filepath: Path) -> None:
         DownloadError: If the downloaded file is not the same size as the file at the
             URL path.
     """
+    # TODO refine
+
     expected_file_size: int | None = None
     with urlopen(url, timeout=10) as response:  # TODO: try-except block here maybe
         if response.has_header("Content-Length"):
@@ -37,32 +39,40 @@ def _verify_downloaded_file_integrity(url: str, downloaded_filepath: Path) -> No
     pass
 
 
-def download_file(url: str, output_filepath: Path) -> None:
+def download_file(url: str, output_filepath: Path, overwrite: bool = False) -> None:
     """Download a file from a given URL to a local directory path.
 
     Args:
         url (str): URL path of the file to download.
-        output_path (Path): Path to downloaded file.
+        output_filepath (Path): Path to downloaded file.
+        overwrite (bool, optional): Whether existing file should be overwritten. Defaults to False.
+
+    Raises:
+        DownloadError: If there is an error when attempting file download.
+        WriteError: If there is an error when attempting to write the file to disk.
     """
-    logger.info(f"Downloading file {url} to {output_filepath}...")
+    if output_filepath.exists() and not overwrite:
+        logger.info(f"File already exists at {output_filepath}, skipping download")
+        return
+
+    logger.info(f"Downloading file from {url} to {output_filepath}")
     try:
         with (
             urlopen(url, timeout=10) as response,
-            open(str(output_filepath), "wb") as out_file,
+            open(output_filepath, "wb") as out_file,
         ):
             shutil.copyfileobj(response, out_file)
-    except (
-        HTTPError,
-        ContentTooShortError,
-        URLError,
-        TimeoutError,
-        FileNotFoundError,
-    ) as ex:
-        logger.warning("Failed to download file")
+            logger.info(f"Successfully downloaded file from {url} to {output_filepath}")
+    except (URLError, TimeoutError) as ex:
+        logger.warning(f"Error downloading file from {url}: {ex}")
         if output_filepath.exists():
             output_filepath.unlink()
         raise DownloadError from ex
-    logger.info("Download complete")
+    except OSError as ex:
+        logger.warning(f"Error writing file to {output_filepath}: {ex}")
+        if output_filepath.exists():
+            output_filepath.unlink()
+        raise WriteError from ex
 
 
 def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> None:
@@ -102,6 +112,7 @@ def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> Non
         files = files - existing_files
 
     # Download files
+    # TODO redo this block
     downloaded_files: set[str] = set()
     for file_name in files:
         for mirror in mirrors:
