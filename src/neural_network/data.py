@@ -1,3 +1,4 @@
+import hashlib
 import shutil
 from pathlib import Path
 from urllib.error import URLError
@@ -58,11 +59,35 @@ def _verify_full_file_download(
         raise DownloadError(f"Failed to download file to {downloaded_filepath}")
 
 
+def _calculate_file_checksum(filepath: Path) -> str:
+    """Calculate the SHA256 checksum of a file.
+
+    Args:
+        filepath (Path): Path to file to calculate checksum for.
+
+    Returns:
+        str: SHA256 checksum of the file.
+    """
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(filepath, "rb") as f:
+            while chunk := f.read(8192):
+                sha256_hash.update(chunk)
+            return sha256_hash.hexdigest()
+    except OSError as ex:
+        logger.warning(
+            f"Error occurred while calculating checksum for {filepath}: {ex}"
+        )
+        raise ReadError from ex
+
+
 def _verify_downloaded_file_integrity(
     downloaded_filepath: Path, expected_checksum: str
 ) -> None:
-    # TODO
-    pass
+    actual_checksum: str = _calculate_file_checksum(downloaded_filepath)
+    if actual_checksum != expected_checksum:
+        _delete_file(downloaded_filepath)
+        raise DownloadError(f"Corrupted file download for {downloaded_filepath}")
 
 
 def _download_file(url: str, output_filepath: Path, overwrite: bool = False) -> None:
