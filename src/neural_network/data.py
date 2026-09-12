@@ -113,19 +113,21 @@ def _verify_downloaded_file_integrity(
     )
 
 
-def _download_file(
+def _download_file_single_attempt(
     url: str,
     output_filepath: Path,
     overwrite: bool = False,
     checksum: str | None = None,
 ) -> None:
-    """Download a file from a given URL to a local directory path.
+    """Makes a single attempt to download a file from a given URL to a local directory path.
 
     Args:
         url (str): URL path of the file to download.
         output_filepath (Path): Path to downloaded file.
         overwrite (bool, optional): Whether existing file should be overwritten.
             Defaults to False.
+        checksum (str | None, optional): Expected SHA256 checksum of the file.
+            Defaults to None.
 
     Raises:
         DownloadError: If there is an error when attempting file download.
@@ -162,6 +164,48 @@ def _download_file(
     if checksum:
         _verify_downloaded_file_integrity(output_filepath, checksum)
     logger.success(f"Successfully downloaded file from {url} to {output_filepath}")
+
+
+def _download_file(
+    url: str,
+    output_filepath: Path,
+    overwrite: bool = False,
+    checksum: str | None = None,
+    retry_attempts: int = 3,
+) -> None:
+    """Download a file from a given URL to a local directory path with retry logic.
+
+    Args:
+        url (str): URL path of the file to download.
+        output_filepath (Path): Path to downloaded file.
+        overwrite (bool, optional): Whether existing file should be overwritten.
+            Defaults to False.
+        checksum (str | None, optional): Expected SHA256 checksum of the file.
+            Defaults to None.
+        retry_attempts (int, optional): Number of times to retry the download.
+            Defaults to 3.
+
+    Raises:
+        DownloadError: If there is an error when attempting file download.
+        WriteError: If there is an error when attempting to write the file to disk.
+    """
+    attempt: int = 1
+    while attempt < retry_attempts:
+        try:
+            _download_file_single_attempt(
+                url, output_filepath, overwrite=overwrite, checksum=checksum
+            )
+            return
+        except DownloadError as ex:
+            attempt += 1
+            logger.warning(
+                f"Attempt {attempt} failed to download file from {url}: {ex}"
+            )
+            if attempt > retry_attempts:
+                logger.warning(
+                    f"Failed to download file from {url} after {attempt} attempts"
+                )
+                raise
 
 
 def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> None:
