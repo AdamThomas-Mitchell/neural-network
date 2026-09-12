@@ -18,6 +18,7 @@ def _delete_file(filepath: Path) -> None:
     Raises:
         DeleteError: If there is an error when attempting to delete the file.
     """
+    logger.debug(f"Deleting file at {filepath}")
     try:
         if filepath.exists():
             filepath.unlink()
@@ -39,6 +40,7 @@ def _verify_full_file_download(
     Raises:
         DownloadError: If the downloaded file is not the correct size.
     """
+    logger.debug(f"Verifying downloaded file size for {downloaded_filepath}")
     actual_file_size: int | None = None
     try:
         if downloaded_filepath.exists():
@@ -58,6 +60,10 @@ def _verify_full_file_download(
         _delete_file(downloaded_filepath)
         raise DownloadError(f"Failed to download file to {downloaded_filepath}")
 
+    logger.debug(
+        f"Successfully verified downloaded file size for {downloaded_filepath}"
+    )
+
 
 def _calculate_file_checksum(filepath: Path) -> str:
     """Calculate the SHA256 checksum of a file.
@@ -68,6 +74,8 @@ def _calculate_file_checksum(filepath: Path) -> str:
     Returns:
         str: SHA256 checksum of the file.
     """
+    logger.debug(f"Calculating SHA256 checksum for {filepath}")
+
     sha256_hash = hashlib.sha256()
     try:
         with open(filepath, "rb") as f:
@@ -84,13 +92,33 @@ def _calculate_file_checksum(filepath: Path) -> str:
 def _verify_downloaded_file_integrity(
     downloaded_filepath: Path, expected_checksum: str
 ) -> None:
+    """Verify the integrity of a downloaded file by checking its checksum.
+
+    Args:
+        downloaded_filepath (Path): Path to the downloaded file.
+        expected_checksum (str): Expected SHA256 checksum of the file.
+
+    Raises:
+        DownloadError: If the downloaded file has a different checksum than expected.
+    """
+    logger.debug(f"Verifying downloaded file integrity for {downloaded_filepath}")
+
     actual_checksum: str = _calculate_file_checksum(downloaded_filepath)
     if actual_checksum != expected_checksum:
         _delete_file(downloaded_filepath)
         raise DownloadError(f"Corrupted file download for {downloaded_filepath}")
 
+    logger.debug(
+        f"Successfully verified downloaded file integrity for {downloaded_filepath}"
+    )
 
-def _download_file(url: str, output_filepath: Path, overwrite: bool = False) -> None:
+
+def _download_file(
+    url: str,
+    output_filepath: Path,
+    overwrite: bool = False,
+    checksum: str | None = None,
+) -> None:
     """Download a file from a given URL to a local directory path.
 
     Args:
@@ -103,11 +131,12 @@ def _download_file(url: str, output_filepath: Path, overwrite: bool = False) -> 
         DownloadError: If there is an error when attempting file download.
         WriteError: If there is an error when attempting to write the file to disk.
     """
+    logger.info(f"Downloading file from {url} to {output_filepath}")
+
     if output_filepath.exists() and not overwrite:
         logger.info(f"File already exists at {output_filepath}, skipping download")
         return
 
-    logger.info(f"Downloading file from {url} to {output_filepath}")
     try:
         with (
             urlopen(url, timeout=10) as response,
@@ -128,9 +157,11 @@ def _download_file(url: str, output_filepath: Path, overwrite: bool = False) -> 
         _delete_file(output_filepath)
         raise WriteError from ex
 
-    if expected_file_size:
+    if expected_file_size is not None:
         _verify_full_file_download(output_filepath, expected_file_size)
-    logger.info(f"Successfully downloaded file from {url} to {output_filepath}")
+    if checksum:
+        _verify_downloaded_file_integrity(output_filepath, checksum)
+    logger.success(f"Successfully downloaded file from {url} to {output_filepath}")
 
 
 def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> None:
@@ -149,33 +180,53 @@ def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> Non
         "https://ossci-datasets.s3.amazonaws.com/mnist/",
         "http://yann.lecun.com/exdb/mnist/",
     ]
-    files: set[str] = {
-        "train-images-idx3-ubyte.gz",
-        "train-labels-idx1-ubyte.gz",
-        "t10k-images-idx3-ubyte.gz",
-        "t10k-labels-idx1-ubyte.gz",
+    files: dict[str, dict[str, str]] = {
+        "train_images": {
+            "file_name": "train-images-idx3-ubyte.gz",
+            "checksum": "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609",
+        },
+        "train_labels": {
+            "file_name": "train-labels-idx1-ubyte.gz",
+            "checksum": "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c",
+        },
+        "test_images": {
+            "file_name": "t10k-images-idx3-ubyte.gz",
+            "checksum": "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6",
+        },
+        "test_labels": {
+            "file_name": "t10k-labels-idx1-ubyte.gz",
+            "checksum": "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6",
+        },
     }
+    logger.info(f"Downloading MNIST dataset to {output_dirpath}")
 
     if not output_dirpath.exists() or not output_dirpath.is_dir():
         logger.error(f"{output_dirpath} is not a valid directory")
         raise NotADirectoryError(f"{output_dirpath} is not a valid directory")
 
-    # Download files
     downloaded_files: set[str] = set()
-    for file_name in files:
+    for _, value in files.items():
+        file_name: str = value["file_name"]
+        checksum: str = value["checksum"]
+
         for mirror in mirrors:
             try:
                 file_url: str = mirror + file_name
                 output_filepath: Path = output_dirpath / file_name
-                _download_file(file_url, output_filepath, overwrite=overwrite)
+                _download_file(
+                    file_url, output_filepath, overwrite=overwrite, checksum=checksum
+                )
                 downloaded_files.add(file_name)
                 break
             except DownloadError as ex:
                 logger.warning(f"Failed to download {file_name} from {mirror}: {ex}")
 
-    if downloaded_files != files:
-        failed = files - downloaded_files
+    files_to_download: set[str] = {f["file_name"] for _, f in files.items()}
+    if downloaded_files != files_to_download:
+        failed = files_to_download - downloaded_files
         logger.error(f"Failed to download the following file(s): {str(failed)}")
         raise FileNotFoundError(
             f"Failed to download the following file(s): {str(failed)}"
         )
+
+    logger.success(f"Successfully downloaded MNIST dataset to {output_dirpath}")
