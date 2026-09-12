@@ -189,8 +189,8 @@ def _download_file(
         DownloadError: If there is an error when attempting file download.
         WriteError: If there is an error when attempting to write the file to disk.
     """
-    attempt: int = 1
-    while attempt < retry_attempts:
+    attempt: int = 0
+    while True:
         try:
             _download_file_single_attempt(
                 url, output_filepath, overwrite=overwrite, checksum=checksum
@@ -201,7 +201,7 @@ def _download_file(
             logger.warning(
                 f"Attempt {attempt} failed to download file from {url}: {ex}"
             )
-            if attempt > retry_attempts:
+            if attempt >= retry_attempts:
                 logger.warning(
                     f"Failed to download file from {url} after {attempt} attempts"
                 )
