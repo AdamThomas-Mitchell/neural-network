@@ -213,6 +213,7 @@ def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> Non
 
     Args:
         output_dirpath (Path): Path to local directory where files will be downloaded.
+            Must be a valid existing directory.
         overwrite (bool, optional): Whether existing MNIST files should be overwritten.
             Defaults to False.
 

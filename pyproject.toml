@@ -82,3 +82,6 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
 ]
+
+[project.scripts]
+data-download = "neural_network.scripts.data_download:main"
