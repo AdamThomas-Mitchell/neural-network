@@ -8,7 +8,6 @@ from loguru import logger
 
 from neural_network.config.data import DatasetConfig
 from neural_network.errors import (
-    DatasetConfigError,
     DeleteError,
     DownloadError,
     ReadError,
@@ -221,6 +220,7 @@ def download_dataset(
     """Download the data files for a given dataset to a local directory.
 
     Args:
+        dataset_config (DatasetConfig): Configuration for the dataset to download.
         output_dirpath (Path): Path to local directory where files will be downloaded.
             Must be a valid existing directory.
         overwrite (bool, optional): Whether existing files should be overwritten.
@@ -228,7 +228,7 @@ def download_dataset(
 
     Raises:
         NotADirectoryError: If given output directory is not valid.
-        FileNotFoundError: If any file(s) are not successfully downloaded.
+        DownloadError: If any file(s) are not successfully downloaded.
     """
     logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
 
@@ -236,27 +236,14 @@ def download_dataset(
         logger.error(f"{output_dirpath} is not a valid directory")
         raise NotADirectoryError(f"{output_dirpath} is not a valid directory")
 
-    if not dataset_config.mirrors:
-        logger.error(
-            f"No available mirrors to download {dataset_config.name} dataset files"
-        )
-        raise DatasetConfigError(
-            f"No available mirrors to download {dataset_config.name} dataset files"
-        )
-
-    if not dataset_config.files:
-        logger.error(f"No files defined for {dataset_config.name} dataset")
-        raise DatasetConfigError(f"No files defined for {dataset_config.name} dataset")
-
     downloaded_files: set[str] = set()
-
     for file_info in dataset_config.files:
         file_name: str = file_info.file_path
         checksum: str | None = file_info.checksum
 
         for mirror in dataset_config.mirrors:
             try:
-                file_url: str = mirror + file_name
+                file_url: str = mirror.encoded_string() + file_name
                 output_filepath: Path = output_dirpath / file_name
                 _download_file(
                     file_url, output_filepath, overwrite=overwrite, checksum=checksum
@@ -270,8 +257,6 @@ def download_dataset(
     if downloaded_files != files_to_download:
         failed = files_to_download - downloaded_files
         logger.error(f"Failed to download the following file(s): {str(failed)}")
-        raise FileNotFoundError(
-            f"Failed to download the following file(s): {str(failed)}"
-        )
+        raise DownloadError(f"Failed to download the following file(s): {str(failed)}")
 
     logger.success(f"Successfully downloaded MNIST dataset to {output_dirpath}")

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class FileInfo(BaseModel):
@@ -9,5 +9,5 @@ class FileInfo(BaseModel):
 
 class DatasetConfig(BaseModel):
     name: str
-    mirrors: list[str]
-    files: list[FileInfo]
+    mirrors: list[HttpUrl] = Field(min_length=1)
+    files: list[FileInfo] = Field(min_length=1)
