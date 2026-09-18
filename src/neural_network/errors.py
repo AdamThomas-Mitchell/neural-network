@@ -2,6 +2,10 @@ class DataError(Exception):
     """Base exception for errors regarding data."""
 
 
+class DatasetConfigError(DataError):
+    """Error for invalid dataset config"""
+
+
 class DownloadError(DataError):
     """Error when downloading an external resource."""
 
