@@ -44,13 +44,22 @@ def _verify_full_file_download(
         expected_file_size (int): Expected size of the file.
 
     Raises:
+        FileNotFoundError: If file to check does not exist.
         DownloadError: If the downloaded file is not the correct size.
     """
     logger.debug(f"Verifying downloaded file size for {downloaded_filepath}")
+
+    if not downloaded_filepath.is_file():
+        logger.warning(
+            f"Cannot verify file size for {downloaded_filepath} - file does not exist"
+        )
+        raise FileNotFoundError(
+            f"Cannot verify file size for {downloaded_filepath} - file does not exist"
+        )
+
     actual_file_size: int | None = None
     try:
-        if downloaded_filepath.exists():
-            actual_file_size = downloaded_filepath.stat().st_size
+        actual_file_size = downloaded_filepath.stat().st_size
     except OSError as ex:
         logger.warning(
             f"Error occurred while fetching file size from {downloaded_filepath}: {ex}"
@@ -79,8 +88,19 @@ def _calculate_file_checksum(filepath: Path) -> str:
 
     Returns:
         str: SHA256 checksum of the file.
+
+    Raises:
+        FileNotFoundError: If file does not exist.
     """
     logger.debug(f"Calculating SHA256 checksum for {filepath}")
+
+    if not filepath.is_file():
+        logger.warning(
+            f"Cannot calculate SHA256 checksum for {filepath} - file does not exist"
+        )
+        raise FileNotFoundError(
+            f"Cannot calculate SHA256 checksum for {filepath} - file does not exist"
+        )
 
     sha256_hash = hashlib.sha256()
     try:
@@ -105,9 +125,18 @@ def _verify_downloaded_file_integrity(
         expected_checksum (str): Expected SHA256 checksum of the file.
 
     Raises:
+        FileNotFoundError: If file to check does not exist.
         DownloadError: If the downloaded file has a different checksum than expected.
     """
     logger.debug(f"Verifying downloaded file integrity for {downloaded_filepath}")
+
+    if not downloaded_filepath.is_file():
+        logger.warning(
+            f"Cannot verify integrity for {downloaded_filepath} - file does not exist"
+        )
+        raise FileNotFoundError(
+            f"Cannot verify integrity for {downloaded_filepath} - file does not exist"
+        )
 
     actual_checksum: str = _calculate_file_checksum(downloaded_filepath)
     if actual_checksum != expected_checksum:
@@ -265,7 +294,3 @@ def download_dataset(
     logger.success(
         f"Successfully downloaded {dataset_config.name} dataset to {output_dirpath}"
     )
-
-
-# TODO: unit tests
-# TODO: add another dataset

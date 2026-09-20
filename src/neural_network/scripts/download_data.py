@@ -49,7 +49,7 @@ def main() -> None:
             output_dirpath=args.output_dirpath,
             overwrite=args.overwrite,
         )
-    except (yaml.YAMLError, PermissionError) as ex:
+    except (yaml.YAMLError, OSError) as ex:
         logger.error(f"Failed to parse YAML file {args.dataset_config_path}: {ex}")
         sys.exit(1)
     except ValidationError as ex:
