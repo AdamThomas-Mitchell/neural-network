@@ -28,7 +28,7 @@ jobs:
       - name: Lint code
         run: uv run ruff check src/ tests/
 
-      - name: Lint code
+      - name: Format code
         run: uv run ruff format --check src/ tests/
 
       # - name: Type check
