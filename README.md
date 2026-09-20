@@ -5,19 +5,20 @@ A feed-forward neural network implmentation built from scratch in Python.
 
 ## Project Goal
 
-Build a fully functional neural network without using deep learning frameworks (PyTorch, TensorFlow, etc.) to deeply understand the underlying mathematics and algorithms.
+Build a fully functional end-to-end neural network project without using deep learning frameworks (PyTorch, TensorFlow, etc.) to understand the underlying mathematics and algorithms. Only NumPy and built-in python functionality to be used (except where other packages allow for good software development practices, e.g., Pydantic for config models)
 
 
 ## Features (Planned)
 
-- Pure Python and Numpy implementation
+- Data download for MNIST and Fashion-MNIST datasets - COMPLETED (v0.2.0)
+- Data pre-processing
+- Data visualisation
 - Forward propagation
 - Backpropagation algorithm
 - Multiple activation functions
 - Multiple loss functions
 - Stochastic gradient descent optimiser
-- MNIST digit classifier
-
+- Model evaluation
 
 ## References
 
