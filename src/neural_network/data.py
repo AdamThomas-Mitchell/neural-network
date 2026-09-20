@@ -6,7 +6,13 @@ from urllib.request import urlopen
 
 from loguru import logger
 
-from neural_network.errors import DeleteError, DownloadError, ReadError, WriteError
+from neural_network.config.data import DatasetConfig
+from neural_network.errors import (
+    DeleteError,
+    DownloadError,
+    ReadError,
+    WriteError,
+)
 
 
 def _delete_file(filepath: Path) -> None:
@@ -189,8 +195,8 @@ def _download_file(
         DownloadError: If there is an error when attempting file download.
         WriteError: If there is an error when attempting to write the file to disk.
     """
-    attempt: int = 1
-    while attempt < retry_attempts:
+    attempt: int = 0
+    while True:
         try:
             _download_file_single_attempt(
                 url, output_filepath, overwrite=overwrite, checksum=checksum
@@ -201,61 +207,43 @@ def _download_file(
             logger.warning(
                 f"Attempt {attempt} failed to download file from {url}: {ex}"
             )
-            if attempt > retry_attempts:
+            if attempt >= retry_attempts:
                 logger.warning(
                     f"Failed to download file from {url} after {attempt} attempts"
                 )
                 raise
 
 
-def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> None:
-    """Download the raw MNIST data files to a given local directory.
+def download_dataset(
+    dataset_config: DatasetConfig, output_dirpath: Path, overwrite: bool = False
+) -> None:
+    """Download the data files for a given dataset to a local directory.
 
     Args:
+        dataset_config (DatasetConfig): Configuration for the dataset to download.
         output_dirpath (Path): Path to local directory where files will be downloaded.
-        overwrite (bool, optional): Whether existing MNIST files should be overwritten.
+            Must be a valid existing directory.
+        overwrite (bool, optional): Whether existing files should be overwritten.
             Defaults to False.
 
     Raises:
         NotADirectoryError: If given output directory is not valid.
-        FileNotFoundError: If any file(s) are not successfully downloaded.
+        DownloadError: If any file(s) are not successfully downloaded.
     """
-    mirrors: list[str] = [
-        "https://ossci-datasets.s3.amazonaws.com/mnist/",
-        "http://yann.lecun.com/exdb/mnist/",
-    ]
-    files: dict[str, dict[str, str]] = {
-        "train_images": {
-            "file_name": "train-images-idx3-ubyte.gz",
-            "checksum": "440fcabf73cc546fa21475e81ea370265605f56be210a4024d2ca8f203523609",
-        },
-        "train_labels": {
-            "file_name": "train-labels-idx1-ubyte.gz",
-            "checksum": "3552534a0a558bbed6aed32b30c495cca23d567ec52cac8be1a0730e8010255c",
-        },
-        "test_images": {
-            "file_name": "t10k-images-idx3-ubyte.gz",
-            "checksum": "8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6",
-        },
-        "test_labels": {
-            "file_name": "t10k-labels-idx1-ubyte.gz",
-            "checksum": "f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6",
-        },
-    }
-    logger.info(f"Downloading MNIST dataset to {output_dirpath}")
+    logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
 
-    if not output_dirpath.exists() or not output_dirpath.is_dir():
+    if not output_dirpath.is_dir():
         logger.error(f"{output_dirpath} is not a valid directory")
         raise NotADirectoryError(f"{output_dirpath} is not a valid directory")
 
     downloaded_files: set[str] = set()
-    for _, value in files.items():
-        file_name: str = value["file_name"]
-        checksum: str = value["checksum"]
+    for file_info in dataset_config.files:
+        file_name: str = file_info.file_path
+        checksum: str | None = file_info.checksum
 
-        for mirror in mirrors:
+        for mirror in dataset_config.mirrors:
             try:
-                file_url: str = mirror + file_name
+                file_url: str = mirror.encoded_string() + file_name
                 output_filepath: Path = output_dirpath / file_name
                 _download_file(
                     file_url, output_filepath, overwrite=overwrite, checksum=checksum
@@ -264,13 +252,20 @@ def download_mnist_dataset(output_dirpath: Path, overwrite: bool = False) -> Non
                 break
             except DownloadError as ex:
                 logger.warning(f"Failed to download {file_name} from {mirror}: {ex}")
+            except WriteError as ex:
+                logger.warning(f"Failed to write {file_name} to disk: {ex}")
+                break
 
-    files_to_download: set[str] = {f["file_name"] for _, f in files.items()}
+    files_to_download: set[str] = {f.file_path for f in dataset_config.files}
     if downloaded_files != files_to_download:
         failed = files_to_download - downloaded_files
         logger.error(f"Failed to download the following file(s): {str(failed)}")
-        raise FileNotFoundError(
-            f"Failed to download the following file(s): {str(failed)}"
-        )
+        raise DownloadError(f"Failed to download the following file(s): {str(failed)}")
 
-    logger.success(f"Successfully downloaded MNIST dataset to {output_dirpath}")
+    logger.success(
+        f"Successfully downloaded {dataset_config.name} dataset to {output_dirpath}"
+    )
+
+
+# TODO: unit tests
+# TODO: add another dataset
