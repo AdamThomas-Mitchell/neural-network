@@ -232,7 +232,7 @@ def download_dataset(
     """
     logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
 
-    if not output_dirpath.exists() or not output_dirpath.is_dir():
+    if not output_dirpath.is_dir():
         logger.error(f"{output_dirpath} is not a valid directory")
         raise NotADirectoryError(f"{output_dirpath} is not a valid directory")
 
@@ -252,6 +252,9 @@ def download_dataset(
                 break
             except DownloadError as ex:
                 logger.warning(f"Failed to download {file_name} from {mirror}: {ex}")
+            except WriteError as ex:
+                logger.warning(f"Failed to write {file_name} to disk: {ex}")
+                break
 
     files_to_download: set[str] = {f.file_path for f in dataset_config.files}
     if downloaded_files != files_to_download:
@@ -259,4 +262,10 @@ def download_dataset(
         logger.error(f"Failed to download the following file(s): {str(failed)}")
         raise DownloadError(f"Failed to download the following file(s): {str(failed)}")
 
-    logger.success(f"Successfully downloaded MNIST dataset to {output_dirpath}")
+    logger.success(
+        f"Successfully downloaded {dataset_config.name} dataset to {output_dirpath}"
+    )
+
+
+# TODO: unit tests
+# TODO: add another dataset
