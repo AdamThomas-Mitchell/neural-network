@@ -341,3 +341,7 @@ def unzip_gzip_file(
         logger.warning(f"Unable to write to {output_filepath}")
         _delete_file(output_filepath)
         raise WriteError(f"Unable to write to {output_filepath}") from ex
+
+
+def convert_ubyte_to_numpy(filepath: Path) -> None:
+    pass
