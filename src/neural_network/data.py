@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import shutil
 from pathlib import Path
@@ -294,3 +295,39 @@ def download_dataset(
     logger.success(
         f"Successfully downloaded {dataset_config.name} dataset to {output_dirpath}"
     )
+
+
+def _is_valid_gzip(filepath: Path) -> bool:
+    if not filepath.is_file():
+        return False
+
+    try:
+        with open(filepath, "rb") as f:
+            return (
+                f.read(2) == b"\x1f\x8b"
+            )  # NOTE: magic number for gzip compressed files is '1f 8b'
+    except OSError as ex:
+        logger.warning(f"Unable to read {filepath}")
+        raise ReadError(f"Unable to read {filepath}") from ex
+
+
+def unzip_gzip_file(zipped_filepath: Path, output_filepath: Path) -> None:
+    logger.debug(
+        f"Unzipping file {zipped_filepath} and saving contents to {output_filepath}"
+    )
+
+    if not _is_valid_gzip(zipped_filepath):
+        logger.warning(f"{zipped_filepath} is not a valid gzip file")
+        raise ValueError(f"{zipped_filepath} is not a valid gzip file")
+
+    try:
+        with gzip.open(zipped_filepath, "rb") as f_in:
+            with open(output_filepath, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        logger.success(f"Successfully unzipped {zipped_filepath} to {output_filepath}")
+    except gzip.BadGzipFile as ex:
+        logger.warning(f"Unable to parse file: {zipped_filepath}")
+        raise ReadError(f"Unable to parse file: {zipped_filepath}") from ex
+    except OSError as ex:
+        logger.warning(f"Unable to write to {output_filepath}")
+        raise WriteError(f"Unable to write to {output_filepath}") from ex
