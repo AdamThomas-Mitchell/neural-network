@@ -311,7 +311,9 @@ def _is_valid_gzip(filepath: Path) -> bool:
         raise ReadError(f"Unable to read {filepath}") from ex
 
 
-def unzip_gzip_file(zipped_filepath: Path, output_filepath: Path) -> None:
+def unzip_gzip_file(
+    zipped_filepath: Path, output_filepath: Path, overwrite: bool = False
+) -> None:
     logger.debug(
         f"Unzipping file {zipped_filepath} and saving contents to {output_filepath}"
     )
@@ -320,6 +322,12 @@ def unzip_gzip_file(zipped_filepath: Path, output_filepath: Path) -> None:
         logger.warning(f"{zipped_filepath} is not a valid gzip file")
         raise ValueError(f"{zipped_filepath} is not a valid gzip file")
 
+    if output_filepath.is_file() and not overwrite:
+        logger.info(
+            f"Unable to unzip: {output_filepath} already exists and overwrite set to false"
+        )
+        return
+
     try:
         with gzip.open(zipped_filepath, "rb") as f_in:
             with open(output_filepath, "wb") as f_out:
@@ -327,7 +335,9 @@ def unzip_gzip_file(zipped_filepath: Path, output_filepath: Path) -> None:
         logger.success(f"Successfully unzipped {zipped_filepath} to {output_filepath}")
     except gzip.BadGzipFile as ex:
         logger.warning(f"Unable to parse file: {zipped_filepath}")
+        _delete_file(output_filepath)
         raise ReadError(f"Unable to parse file: {zipped_filepath}") from ex
     except OSError as ex:
         logger.warning(f"Unable to write to {output_filepath}")
+        _delete_file(output_filepath)
         raise WriteError(f"Unable to write to {output_filepath}") from ex

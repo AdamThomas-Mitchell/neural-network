@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import io
 from pathlib import Path
@@ -37,6 +38,13 @@ def make_response(
     content: bytes = CONTENT, content_length: int | None = len(CONTENT)
 ) -> FakeResponse:
     return FakeResponse(content, content_length)
+
+
+def make_gzip_file(filepath: Path, content: bytes = CONTENT) -> Path:
+    """Creat a dummy gzip archive."""
+    with gzip.open(filepath, "wb") as f:
+        f.write(content)
+    return filepath
 
 
 def make_config(files: list[str], checksums: dict[str, str] | None = None):
@@ -334,3 +342,93 @@ class TestDownloadDataset:
 
         assert (tmp_path / "a.bin").read_bytes() == CONTENT
         assert mock.call_args.args[0] == "https://mirror1.example.com/a.bin"
+
+
+class TestIsValidGzip:
+    def test_gzip_file_is_valid(self, tmp_path: Path):
+        f = make_gzip_file(tmp_path / "a.gz")
+        assert data._is_valid_gzip(f) is True
+
+    def test_plain_file_is_not_valid(self, tmp_path: Path):
+        f = tmp_path / "a.bin"
+        f.write_bytes(CONTENT)
+        assert data._is_valid_gzip(f) is False
+
+    def test_missing_file_is_not_valid(self, tmp_path: Path):
+        assert data._is_valid_gzip(tmp_path / "missing.gz") is False
+
+    def test_directory_is_not_valid(self, tmp_path: Path):
+        assert data._is_valid_gzip(tmp_path) is False
+
+    def test_empty_file_is_not_valid(self, tmp_path: Path):
+        f = tmp_path / "empty.gz"
+        f.write_bytes(b"")
+        assert data._is_valid_gzip(f) is False
+
+    def test_truncated_magic_number_is_not_valid(self, tmp_path: Path):
+        f = tmp_path / "a.gz"
+        f.write_bytes(b"\x1f")
+        assert data._is_valid_gzip(f) is False
+
+    def test_magic_number_alone_is_valid(self, tmp_path: Path):
+        f = tmp_path / "a.gz"
+        f.write_bytes(b"\x1f\x8b")
+        assert data._is_valid_gzip(f) is True
+
+    def test_read_error_raises_read_error(self, tmp_path: Path):
+        f = make_gzip_file(tmp_path / "a.gz")
+        with patch("builtins.open", side_effect=OSError("boom")):
+            with pytest.raises(ReadError):
+                data._is_valid_gzip(f)
+
+
+class TestUnzipGzipFile:
+    def test_unzips_file(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "a.gz")
+        out = tmp_path / "a.bin"
+        data.unzip_gzip_file(zipped, out)
+        assert out.read_bytes() == CONTENT
+
+    def test_unzips_empty_file(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "empty.gz", b"")
+        out = tmp_path / "empty.bin"
+        data.unzip_gzip_file(zipped, out)
+        assert out.read_bytes() == b""
+
+    def test_does_not_overwrite_existing_output_file(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "a.gz")
+        out = tmp_path / "a.bin"
+        out.write_bytes(b"old content that is longer than the new content")
+        data.unzip_gzip_file(zipped, out, overwrite=False)
+        assert out.read_bytes() == b"old content that is longer than the new content"
+
+    def test_non_gzip_file_raises_value_error(self, tmp_path: Path):
+        zipped = tmp_path / "a.gz"
+        zipped.write_bytes(CONTENT)
+        out = tmp_path / "a.bin"
+        with pytest.raises(ValueError, match="not a valid gzip file"):
+            data.unzip_gzip_file(zipped, out)
+        assert not out.exists()
+
+    def test_missing_file_raises_value_error(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="not a valid gzip file"):
+            data.unzip_gzip_file(tmp_path / "missing.gz", tmp_path / "a.bin")
+
+    def test_bad_gzip_body_raises_read_error(self, tmp_path: Path):
+        zipped = tmp_path / "a.gz"
+        zipped.write_bytes(b"\x1f\x8b" + b"not really gzipped")
+        with pytest.raises(ReadError):
+            data.unzip_gzip_file(zipped, tmp_path / "a.bin")
+
+    def test_unwritable_output_path_raises_write_error(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "a.gz")
+        out = tmp_path / "missing_dir" / "a.bin"
+        with pytest.raises(WriteError):
+            data.unzip_gzip_file(zipped, out)
+
+    def test_write_error_raises_write_error(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "a.gz")
+        out = tmp_path / "a.bin"
+        with patch.object(data.shutil, "copyfileobj", side_effect=OSError("disk full")):
+            with pytest.raises(WriteError):
+                data.unzip_gzip_file(zipped, out)
