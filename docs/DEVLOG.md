@@ -20,3 +20,7 @@ Happy to bump this up to v0.2.0 now with this functionality. Next step is data p
 Working on the data preprocessing step. Decided on separate steps to first unzip the raw data file then unpack the ubyte data and save as numpy arrays. Completed the gzip step today, got Claude to write the unit tests. Next step is parsing the custom data format, this resource will be useful: https://www.fon.hum.uva.nl/praat/manual/IDX_file_format.html
 
 Once I get the individual steps done, worth coding up another cli function. Might have to update the dataset config to include transform function or something, not sure yet.
+
+
+## 29/09/26
+Working on handling the file handling for the uncompressed MNIST data files. Bit more complicated than anticipated with trying to read and parse the binary data from scratch. Got a reasonable idea of how to structure the code now. Got the skeleton down, next step is to implement the binary data reader class.

@@ -7,8 +7,8 @@ from urllib.error import URLError
 
 import pytest
 
-from neural_network import data
 from neural_network.config.data import DatasetConfig, FileInfo
+from neural_network.data import data
 from neural_network.errors import (
     DeleteError,
     DownloadError,

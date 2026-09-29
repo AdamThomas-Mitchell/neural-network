@@ -7,7 +7,7 @@ from loguru import logger
 from pydantic import ValidationError
 
 from neural_network.config.data import DatasetConfig
-from neural_network.data import download_dataset
+from neural_network.data.data import download_dataset
 from neural_network.errors import DataError
 
 
