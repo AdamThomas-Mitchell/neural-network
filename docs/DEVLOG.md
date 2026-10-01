@@ -24,3 +24,7 @@ Once I get the individual steps done, worth coding up another cli function. Migh
 
 ## 29/09/26
 Working on handling the file handling for the uncompressed MNIST data files. Bit more complicated than anticipated with trying to read and parse the binary data from scratch. Got a reasonable idea of how to structure the code now. Got the skeleton down, next step is to implement the binary data reader class.
+
+
+## 01/10/26
+Firs implementation of the binary reader done. Making a bit more sense now. Next step is to write some tests, could probably optimise a little bit as well.
