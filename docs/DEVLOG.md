@@ -28,3 +28,17 @@ Working on handling the file handling for the uncompressed MNIST data files. Bit
 
 ## 01/10/26
 Firs implementation of the binary reader done. Making a bit more sense now. Next step is to write some tests, could probably optimise a little bit as well.
+
+Turned off the MyPy pre-commit stuff as it's annoying me. Need to come back and sort this out.
+
+
+## 02/10/26
+Made sure binary reader can read the necessary data types that are stated in the IDX format specification. Had a think about how to model the IDX files, have a first pass at the idx models module. Implemented a funcction in the parser module to read the header. This has me thinking about whether my model for the data record is quite right. Instead of one global array it's probably better to model the data as a list or generator of individual records. Need to make a first pass in the parser module for reading the actual data in the IDX files, should play about with this in a Jupyter notebook. Might need to add a skip_bytes function to the binary reader. Also would be useful to know how many bytes the header is, but feels wrong to include that in the header class when it's not explicitly stated in the idx file. Will have a think. It'll become clearer as a crack on through the parser module I'm sure.
+
+Next step: first pass at loading data in the parser module.
+
+
+
+### Actions:
+- Properly configure MyPy pre-commit hook.
+- Set up Claude code on GitHub to review PRs.
