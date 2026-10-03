@@ -20,3 +20,7 @@ class DeleteError(DataError):
 
 class ReadError(DataError):
     """Error when reading a local file."""
+
+
+class ParseError(DataError):
+    """Error when parsing binary data."""

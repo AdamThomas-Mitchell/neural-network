@@ -84,3 +84,4 @@ exclude_lines = [
 
 [project.scripts]
 download-data = "neural_network.scripts.download_data:main"
+process_data = "neural_network.scripts.process_data:main"

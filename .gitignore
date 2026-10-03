@@ -82,7 +82,8 @@ docs/_build/
 docs/.doctrees/
 
 # Data files (add large datasets here later)
-data/
+data/fashion-MNIST
+data/MNIST
 *.csv
 *.pkl
 *.h5
