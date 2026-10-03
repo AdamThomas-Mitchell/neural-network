@@ -57,17 +57,5 @@ class BinaryReader:
     def u8(self) -> int:
         return self.unpack("B")[0]
 
-    def i8(self) -> int:
-        return self.unpack("b")[0]
-
-    def i16(self) -> int:
-        return self.unpack("h")[0]
-
     def i32(self) -> int:
         return self.unpack("i")[0]
-
-    def f32(self) -> float:
-        return self.unpack("f")[0]
-
-    def f64(self) -> float:
-        return self.unpack("d")[0]

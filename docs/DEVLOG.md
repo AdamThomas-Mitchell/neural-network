@@ -38,7 +38,25 @@ Made sure binary reader can read the necessary data types that are stated in the
 Next step: first pass at loading data in the parser module.
 
 
+## 03/10/26
+Ok think I've largely sorted the main functionality for data processing. Could do with a tidy up, and I need to write it into a CLI script. Refactored things to improve the feng shui.
+
+Couple things to note:
+- Binary reader, does not cache struct types. This could offer a speed up but actually we only need the binary reader for reading the header of the IDX files so would probably be overkill anyway. Still would be informative to read up on lru_cache stuff.
+- Currently exists a function to parse an individual sample from an IDX file. Can't image this will ever be used as I settled on just loading all data. Too sentimental to remove.
+- On that note, when converting IDX file to numpy I'm just loading everything into memory. Could probably make that more robust by iterating through samples and saving to np file but the dataset is pretty small and this feels like it would be an over-optimisation.
+- Currently in the processing step I'm unzipping gzip then writing to IDX then opening IDX and writing a NumPy file. This could probably be streamlined. I wonder if i could even just go straight to compressed file to np array, seems numpy has some functions that could be useful for that. Fine for now though if it works.
+
+Next steps:
+1. Tidy up current processing code
+2. Write CLI script for data processing
+3. Tests (sad)
+4. Data visualisation utility function for image samples
+5. Error handling for existing code
+
+
 
 ### Actions:
 - Properly configure MyPy pre-commit hook.
 - Set up Claude code on GitHub to review PRs.
+- Tidy up GitHub project.
