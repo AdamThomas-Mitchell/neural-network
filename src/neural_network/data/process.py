@@ -15,20 +15,20 @@ from neural_network.errors import (
 
 
 def _is_valid_gzip(filepath: Path) -> bool:
+    magic: bytes = b"\x1f\x8b"
+
     if not filepath.is_file():
         return False
 
     try:
         with open(filepath, "rb") as f:
-            return (
-                f.read(2) == b"\x1f\x8b"
-            )  # NOTE: magic number for gzip compressed files is '1f 8b'
+            return f.read(2) == magic
     except OSError as ex:
         logger.warning(f"Unable to read {filepath}")
         raise ReadError(f"Unable to read {filepath}") from ex
 
 
-def unzip_gzip_file(
+def _unzip_gzip_file(
     zipped_filepath: Path, output_filepath: Path, overwrite: bool = False
 ) -> None:
     logger.debug(
@@ -60,7 +60,7 @@ def unzip_gzip_file(
         raise WriteError(f"Unable to write to {output_filepath}") from ex
 
 
-def convert_idx_to_np(
+def _convert_idx_to_np(
     idx_filepath: Path, output_filepath: Path, overwrite: bool = False
 ) -> None:
     logger.debug(
@@ -75,3 +75,7 @@ def convert_idx_to_np(
 
     data: NDArray = load_data(idx_filepath)
     np.save(output_filepath, data)
+
+
+def process_dataset(filepath: Path) -> None:
+    return None

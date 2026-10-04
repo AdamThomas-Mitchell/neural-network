@@ -27,7 +27,7 @@ Working on handling the file handling for the uncompressed MNIST data files. Bit
 
 
 ## 01/10/26
-Firs implementation of the binary reader done. Making a bit more sense now. Next step is to write some tests, could probably optimise a little bit as well.
+First implementation of the binary reader done. Making a bit more sense now. Next step is to write some tests, could probably optimise a little bit as well.
 
 Turned off the MyPy pre-commit stuff as it's annoying me. Need to come back and sort this out.
 
@@ -53,6 +53,13 @@ Next steps:
 3. Tests (sad)
 4. Data visualisation utility function for image samples
 5. Error handling for existing code
+
+
+## 04/10/26
+I'm thinking I'll probably need a data loader class so I can select individual and batch samples, and also visualise the data.
+
+Need to think about how to do the CLI processing. Think it makes sense to model dataformats and allowed data format transitions, then write a processing config class. Might make sense to model the global dataset config with fields for download and processing config. Then again just need to give the CLI process command the dataset name or cfg file and an output dir.
+
 
 
 
