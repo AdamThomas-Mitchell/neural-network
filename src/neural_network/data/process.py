@@ -1,11 +1,13 @@
 import gzip
 import shutil
+import tempfile
 from pathlib import Path
 
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
+from neural_network.config.data import DatasetConfig
 from neural_network.data.idx import load_data
 from neural_network.data.utils import delete_file
 from neural_network.errors import (
@@ -77,5 +79,28 @@ def _convert_idx_to_np(
     np.save(output_filepath, data)
 
 
-def process_dataset(filepath: Path) -> None:
-    return None
+def _process_mnist_file(input_file: Path, output_file: Path) -> None:
+    with tempfile.TemporaryDirectory() as t_dir:
+        t_file = Path(t_dir) / "unzipped.idx"
+        _unzip_gzip_file(input_file, t_file)
+        _convert_idx_to_np(t_file, output_file)
+
+
+def process_mnist_dataset(
+    dataset_config=DatasetConfig, overwrite: bool = False
+) -> None:
+    logger.info(f"Processing {dataset_config.name} dataset")
+
+    # TODO: overwrite option
+    # TODO: exception handling
+
+    # check files in raw loc
+    # file_names = [f.file_path for f in dataset_config.files]
+
+    raw_files: list[Path] | None = None
+    processed_files: list[Path] | None = None
+
+    for in_file, out_file in zip(raw_files, processed_files, strict=True):
+        _process_mnist_file(in_file, out_file)
+
+    logger.success(f"Successfully processed all files in {dataset_config.name} dataset")

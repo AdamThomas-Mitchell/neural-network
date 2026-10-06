@@ -61,6 +61,8 @@ I'm thinking I'll probably need a data loader class so I can select individual a
 Need to think about how to do the CLI processing. Think it makes sense to model dataformats and allowed data format transitions, then write a processing config class. Might make sense to model the global dataset config with fields for download and processing config. Then again just need to give the CLI process command the dataset name or cfg file and an output dir.
 
 
+## 06/10/26
+Yeah fuck it, I'm over-engineering this processing step atm. Just have one function that processes MNIST, make more general in future if need be. Just update data config to include raw and processed data locations.
 
 
 ### Actions:
