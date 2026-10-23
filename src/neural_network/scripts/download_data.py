@@ -19,11 +19,6 @@ def main() -> None:
         help="Path to the dataset configuration file.",
     )
     parser.add_argument(
-        "output_dirpath",
-        type=Path,
-        help="Path to local directory where files will be downloaded.",
-    )
-    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Whether existing files should be overwritten.",
@@ -34,10 +29,6 @@ def main() -> None:
         logger.error(f"{args.dataset_config_path} is not a valid file")
         sys.exit(1)
 
-    if not args.output_dirpath.is_dir():
-        logger.error(f"{args.output_dirpath} is not a valid directory")
-        sys.exit(1)
-
     try:
         with open(args.dataset_config_path) as f:
             yaml_contents = yaml.safe_load(f)
@@ -46,7 +37,6 @@ def main() -> None:
 
         download_dataset(
             dataset_config=dataset_config,
-            output_dirpath=args.output_dirpath,
             overwrite=args.overwrite,
         )
     except (yaml.YAMLError, OSError) as ex:

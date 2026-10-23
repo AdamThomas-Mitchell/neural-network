@@ -224,9 +224,7 @@ def _download_file(
                 raise
 
 
-def download_dataset(
-    dataset_config: DatasetConfig, output_dirpath: Path, overwrite: bool = False
-) -> None:
+def download_dataset(dataset_config: DatasetConfig, overwrite: bool = False) -> None:
     """Download the data files for a given dataset to a local directory.
 
     Args:
@@ -240,6 +238,8 @@ def download_dataset(
         NotADirectoryError: If given output directory is not valid.
         DownloadError: If any file(s) are not successfully downloaded.
     """
+    output_dirpath: Path = dataset_config.raw_data_loc
+
     logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
 
     if not output_dirpath.is_dir():
@@ -248,7 +248,7 @@ def download_dataset(
 
     downloaded_files: set[str] = set()
     for file_info in dataset_config.files:
-        file_name: str = file_info.file_path
+        file_name: str = file_info.file_name
         checksum: str | None = file_info.checksum
 
         for mirror in dataset_config.mirrors:
@@ -266,7 +266,7 @@ def download_dataset(
                 logger.warning(f"Failed to write {file_name} to disk: {ex}")
                 break
 
-    files_to_download: set[str] = {f.file_path for f in dataset_config.files}
+    files_to_download: set[str] = {f.file_name for f in dataset_config.files}
     if downloaded_files != files_to_download:
         failed = files_to_download - downloaded_files
         logger.error(f"Failed to download the following file(s): {str(failed)}")

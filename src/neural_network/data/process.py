@@ -75,8 +75,12 @@ def _convert_idx_to_np(
         )
         return
 
+    # TODO exception handling
     data: NDArray = load_data(idx_filepath)
     np.save(output_filepath, data)
+    logger.success(
+        f"Successfully converted file {idx_filepath} in IDX format to NumPy array and saved to {output_filepath}"
+    )
 
 
 def _process_mnist_file(input_file: Path, output_file: Path) -> None:
@@ -84,23 +88,37 @@ def _process_mnist_file(input_file: Path, output_file: Path) -> None:
         t_file = Path(t_dir) / "unzipped.idx"
         _unzip_gzip_file(input_file, t_file)
         _convert_idx_to_np(t_file, output_file)
+    logger.success(
+        f"Successfully processed file {input_file} and saved output to {output_file}"
+    )
 
 
 def process_mnist_dataset(
-    dataset_config=DatasetConfig, overwrite: bool = False
+    dataset_config: DatasetConfig, overwrite: bool = False
 ) -> None:
     logger.info(f"Processing {dataset_config.name} dataset")
 
-    # TODO: overwrite option
-    # TODO: exception handling
+    expected_raw_files: list[Path] = [
+        dataset_config.raw_data_loc / f.file_name for f in dataset_config.files
+    ]
+    processed_files: list[Path] = [
+        dataset_config.processed_data_loc / f"{f.label}.np"
+        for f in dataset_config.files
+    ]
 
-    # check files in raw loc
-    # file_names = [f.file_path for f in dataset_config.files]
+    missing_files = []
+    existing_raw_files = dataset_config.raw_data_loc.iterdir()
+    for f in expected_raw_files:
+        if f not in existing_raw_files:
+            missing_files.append(f.name)
+    if missing_files:
+        logger.warning(f"Raw data files could not be found: {missing_files}")
+        raise FileNotFoundError(f"Raw data files could not be found: {missing_files}")
 
-    raw_files: list[Path] | None = None
-    processed_files: list[Path] | None = None
-
-    for in_file, out_file in zip(raw_files, processed_files, strict=True):
+    for in_file, out_file in zip(expected_raw_files, processed_files, strict=True):
+        if out_file.is_file() and not overwrite:
+            logger.info(f"File {out_file} already exists; skipping")
+            continue
         _process_mnist_file(in_file, out_file)
 
     logger.success(f"Successfully processed all files in {dataset_config.name} dataset")
