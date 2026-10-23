@@ -77,18 +77,23 @@ def parse_sample(idx_file: Path, sample_idx: int) -> NDArray:
 
     bytes_to_skip = header_length + ((sample_idx - 1) * sample_length)
 
-    with open(idx_file, "rb") as f:
-        sample: NDArray = np.frombuffer(
-            buffer=f.read(),
-            dtype=dtype_ntype_map[header.data_type],
-            count=sample_length,
-            offset=bytes_to_skip,
-        )
+    try:
+        with open(idx_file, "rb") as f:
+            sample: NDArray = np.frombuffer(
+                buffer=f.read(),
+                dtype=dtype_ntype_map[header.data_type],
+                count=sample_length,
+                offset=bytes_to_skip,
+            )
 
-    if header.n_dim > 1:
-        sample: NDArray = sample.reshape(*header.dim_sizes[1:])
+        if header.n_dim > 1:
+            sample: NDArray = sample.reshape(*header.dim_sizes[1:])
 
-    return sample
+        return sample
+
+    except OSError as ex:
+        logger.warning(f"Error parsing sample {sample_idx} from file {idx_file}: {ex}")
+        raise ParseError from ex
 
 
 def load_data(idx_file: Path) -> NDArray:
@@ -103,12 +108,15 @@ def load_data(idx_file: Path) -> NDArray:
     header: Header = _parse_header(idx_file)
     header_length: int = 4 + (header.n_dim * dtype_byte_length_map[DIM_SIZE_DTYPE])
 
-    with open(idx_file, "rb") as f:
-        data: NDArray = np.frombuffer(
-            buffer=f.read(),
-            dtype=dtype_ntype_map[header.data_type],
-            count=-1,
-            offset=header_length,
-        ).reshape(*header.dim_sizes)
-
-    return data
+    try:
+        with open(idx_file, "rb") as f:
+            data: NDArray = np.frombuffer(
+                buffer=f.read(),
+                dtype=dtype_ntype_map[header.data_type],
+                count=-1,
+                offset=header_length,
+            ).reshape(*header.dim_sizes)
+        return data
+    except OSError as ex:
+        logger.warning(f"Error loading data from file {idx_file}: {ex}")
+        raise ParseError from ex

@@ -75,12 +75,16 @@ def _convert_idx_to_np(
         )
         return
 
-    # TODO exception handling
-    data: NDArray = load_data(idx_filepath)
-    np.save(output_filepath, data)
-    logger.success(
-        f"Successfully converted file {idx_filepath} in IDX format to NumPy array and saved to {output_filepath}"
-    )
+    try:
+        data: NDArray = load_data(idx_filepath)
+        np.save(output_filepath, data)
+        logger.success(
+            f"Successfully converted file {idx_filepath} in IDX format to NumPy array and saved to {output_filepath}"
+        )
+    except OSError as ex:
+        logger.warning(f"Unable to write to {output_filepath}")
+        delete_file(output_filepath)
+        raise WriteError(f"Unable to write to {output_filepath}") from ex
 
 
 def _process_mnist_file(input_file: Path, output_file: Path) -> None:
