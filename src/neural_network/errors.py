@@ -24,3 +24,7 @@ class ReadError(DataError):
 
 class ParseError(DataError):
     """Error when parsing binary data."""
+
+
+class InvalidFileError(DataError):
+    """Error when a given file is invalid for a given format (e.g., invalid IDX or gzip file)."""

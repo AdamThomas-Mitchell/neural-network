@@ -11,6 +11,7 @@ from neural_network.config.data import DatasetConfig
 from neural_network.data.idx import load_data
 from neural_network.data.utils import delete_file
 from neural_network.errors import (
+    InvalidFileError,
     ReadError,
     WriteError,
 )
@@ -39,7 +40,7 @@ def _unzip_gzip_file(
 
     if not _is_valid_gzip(zipped_filepath):
         logger.warning(f"{zipped_filepath} is not a valid gzip file")
-        raise ValueError(f"{zipped_filepath} is not a valid gzip file")
+        raise InvalidFileError(f"{zipped_filepath} is not a valid gzip file")
 
     if output_filepath.is_file() and not overwrite:
         logger.info(
@@ -106,12 +107,12 @@ def process_mnist_dataset(
         dataset_config.raw_data_loc / f.file_name for f in dataset_config.files
     ]
     processed_files: list[Path] = [
-        dataset_config.processed_data_loc / f"{f.label}.np"
+        dataset_config.processed_data_loc / f"{f.label}.npy"
         for f in dataset_config.files
     ]
 
     missing_files = []
-    existing_raw_files = dataset_config.raw_data_loc.iterdir()
+    existing_raw_files = set(dataset_config.raw_data_loc.iterdir())
     for f in expected_raw_files:
         if f not in existing_raw_files:
             missing_files.append(f.name)

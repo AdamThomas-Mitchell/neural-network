@@ -15,7 +15,7 @@ from neural_network.data.idx.models import (
     dtype_ntype_map,
 )
 from neural_network.data.idx.reader import BinaryReader
-from neural_network.errors import ParseError
+from neural_network.errors import InvalidFileError, ParseError
 
 
 def _parse_header(idx_file: Path) -> Header:
@@ -35,7 +35,7 @@ def _parse_header(idx_file: Path) -> Header:
 
         if reader.read_exact(2) != MAGIC:
             logger.error(f"IDX file {idx_file} has incorrect magic number")
-            raise ParseError(f"IDX file {idx_file} has incorrect magic number")
+            raise InvalidFileError(f"IDX file {idx_file} has incorrect magic number")
 
         data_type: DataType = byte_dtype_map[reader.read_exact(1)]
         n_dim: int = reader.u8()
