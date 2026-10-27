@@ -65,6 +65,10 @@ Need to think about how to do the CLI processing. Think it makes sense to model 
 Yeah fuck it, I'm over-engineering this processing step atm. Just have one function that processes MNIST, make more general in future if need be. Just update data config to include raw and processed data locations.
 
 
+## 27/10/26
+Think I've finished the processing step now. Had claude help me with the tests. Got stuck on debugging the idx parser, helped me there too. Somwhat disheartening it can do what I struggle with instantly but silver lining is that getting stuck is a choice. I'll open a PR and set up Claude to review on Github. Wanna do a dataset regsitry next and some tidying up before moving on the model. Although may need to do a dataloader before that anyway.
+
+
 ### Actions:
 - Properly configure MyPy pre-commit hook.
 - Set up Claude code on GitHub to review PRs.
