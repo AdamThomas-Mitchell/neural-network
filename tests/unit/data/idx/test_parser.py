@@ -105,7 +105,8 @@ class TestLoadData:
 
     def test_loads_one_dimensional_data(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx", LABELS)
-        np.testing.assert_array_equal(parser.load_data(idx), LABELS)
+        data = parser.load_data(idx)
+        np.testing.assert_array_equal(data, LABELS)
 
     def test_loads_empty_dataset(self, tmp_path: Path):
         empty = np.empty((0, 3, 2), dtype=np.uint8)
@@ -138,37 +139,35 @@ class TestLoadData:
 
 
 class TestParseSample:
-    @pytest.mark.parametrize("sample_idx", [1, 2, 3, 4])
-    def test_returns_sample_at_one_based_index(self, tmp_path: Path, sample_idx):
+    @pytest.mark.parametrize("sample_idx", [0, 1, 2, 3])
+    def test_returns_sample_at_zero_based_index(self, tmp_path: Path, sample_idx):
         idx = make_idx_file(tmp_path / "a.idx")
         sample = parser.parse_sample(idx, sample_idx)
-        np.testing.assert_array_equal(sample, ARRAY[sample_idx - 1])
+        np.testing.assert_array_equal(sample, ARRAY[sample_idx])
 
     def test_sample_has_shape_of_remaining_dimensions(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx")
-        assert parser.parse_sample(idx, 1).shape == (3, 2)
+        assert parser.parse_sample(idx, 0).shape == (3, 2)
 
     def test_returns_sample_from_one_dimensional_file(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx", LABELS)
-        np.testing.assert_array_equal(parser.parse_sample(idx, 3), [LABELS[2]])
+        np.testing.assert_array_equal(parser.parse_sample(idx, 2), [LABELS[2]])
 
     @pytest.mark.parametrize("dtype", NUMPY_DTYPES)
     def test_returns_sample_for_every_data_type(self, tmp_path: Path, dtype):
         expected = (ARRAY.astype(np.int64) - 12).astype(dtype)
         idx = make_idx_file(tmp_path / "a.idx", expected)
-        sample = parser.parse_sample(idx, 2)
+        sample = parser.parse_sample(idx, 1)
         assert sample.dtype == dtype
         np.testing.assert_array_equal(sample, expected[1])
 
     def test_index_beyond_last_sample_raises_value_error(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx")
         with pytest.raises(ValueError, match="out of range"):
-            parser.parse_sample(idx, 5)
+            parser.parse_sample(idx, 4)
 
-    @pytest.mark.parametrize("sample_idx", [0, -1])
-    def test_index_below_first_sample_raises_value_error(
-        self, tmp_path: Path, sample_idx
-    ):
+    @pytest.mark.parametrize("sample_idx", [-1, -5])
+    def test_negative_index_raises_value_error(self, tmp_path: Path, sample_idx):
         idx = make_idx_file(tmp_path / "a.idx")
         with pytest.raises(ValueError, match="out of range"):
             parser.parse_sample(idx, sample_idx)
@@ -177,7 +176,7 @@ class TestParseSample:
         idx = tmp_path / "a.idx"
         idx.write_bytes(b"\xff\xff\x08\x01" + (1).to_bytes(4, "big") + b"\x00")
         with pytest.raises(InvalidFileError):
-            parser.parse_sample(idx, 1)
+            parser.parse_sample(idx, 0)
 
     def test_read_error_raises_parse_error(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx")
@@ -187,4 +186,4 @@ class TestParseSample:
             patch("builtins.open", side_effect=OSError("boom")),
         ):
             with pytest.raises(ParseError):
-                parser.parse_sample(idx, 1)
+                parser.parse_sample(idx, 0)

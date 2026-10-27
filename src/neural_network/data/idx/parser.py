@@ -6,8 +6,6 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from neural_network.data.idx.models import (
-    DIM_SIZE_DTYPE,
-    MAGIC,
     DataType,
     Header,
     byte_dtype_map,
@@ -16,6 +14,10 @@ from neural_network.data.idx.models import (
 )
 from neural_network.data.idx.reader import BinaryReader
 from neural_network.errors import InvalidFileError, ParseError
+
+
+MAGIC = b"\x00\x00"
+DIM_SIZE_DTYPE = DataType.i32
 
 
 def _parse_header(idx_file: Path) -> Header:
@@ -30,24 +32,36 @@ def _parse_header(idx_file: Path) -> Header:
     Returns:
         Header: File header for given IDX file
     """
-    with open(idx_file, "rb") as f:
-        reader = BinaryReader(f, endian=">")
+    if not idx_file.is_file():
+        logger.error(f"File does not exist: {idx_file}")
+        raise FileNotFoundError(f"File does not exist: {idx_file}")
 
-        if reader.read_exact(2) != MAGIC:
-            logger.error(f"IDX file {idx_file} has incorrect magic number")
-            raise InvalidFileError(f"IDX file {idx_file} has incorrect magic number")
+    try:
+        with open(idx_file, "rb") as f:
+            reader = BinaryReader(f, endian=">")
 
-        data_type: DataType = byte_dtype_map[reader.read_exact(1)]
-        n_dim: int = reader.u8()
-        dim_sizes: list[int] = [reader.i32() for _ in range(n_dim)]
+            if reader.read_exact(2) != MAGIC:
+                logger.error(f"IDX file {idx_file} has incorrect magic number")
+                raise InvalidFileError(
+                    f"IDX file {idx_file} has incorrect magic number"
+                )
 
-    header = Header(
-        data_type=data_type,
-        n_dim=n_dim,
-        dim_sizes=dim_sizes,
-    )
+            data_type: DataType = byte_dtype_map[reader.read_exact(1)]
+            n_dim: int = reader.u8()
+            dim_sizes: list[int] = [reader.i32() for _ in range(n_dim)]
 
-    return header
+        header = Header(
+            data_type=data_type,
+            n_dim=n_dim,
+            dim_sizes=dim_sizes,
+        )
+        return header
+    except OSError as ex:
+        logger.warning(f"Unable to parse file {idx_file}")
+        raise ParseError from ex
+    except KeyError as ex:
+        logger.warning(f"Invalid IDX file: {idx_file}")
+        raise InvalidFileError from ex
 
 
 def parse_sample(idx_file: Path, sample_idx: int) -> NDArray:
@@ -55,27 +69,26 @@ def parse_sample(idx_file: Path, sample_idx: int) -> NDArray:
 
     Args:
         idx_file (Path): Path to IDX file
-        sample_idx (int): Index of sample to retreive
+        sample_idx (int): Zero-based index of sample to retrieve
 
     Raises:
-        ValueError: If given index is greater than number of samples in file
+        ValueError: If given index is outside the range of samples in file
 
     Returns:
         NDArray: The sample at the given index
     """
     header: Header = _parse_header(idx_file)
 
-    if sample_idx > header.dim_sizes[0]:
+    if not 0 <= sample_idx < header.dim_sizes[0]:
         raise ValueError(
             f"Sample index {sample_idx} out of range - file contains {header.dim_sizes[0]} samples"
         )
 
     header_length: int = 4 + (header.n_dim * dtype_byte_length_map[DIM_SIZE_DTYPE])
-    sample_length: int = dtype_byte_length_map[header.data_type] * math.prod(
-        header.dim_sizes[1:]
-    )
+    sample_length: int = math.prod(header.dim_sizes[1:])
+    sample_bytes: int = sample_length * dtype_byte_length_map[header.data_type]
 
-    bytes_to_skip = header_length + ((sample_idx - 1) * sample_length)
+    bytes_to_skip = header_length + (sample_idx * sample_bytes)
 
     try:
         with open(idx_file, "rb") as f:
@@ -89,7 +102,7 @@ def parse_sample(idx_file: Path, sample_idx: int) -> NDArray:
         if header.n_dim > 1:
             sample: NDArray = sample.reshape(*header.dim_sizes[1:])
 
-        return sample
+        return sample.astype(sample.dtype.newbyteorder("="))
 
     except OSError as ex:
         logger.warning(f"Error parsing sample {sample_idx} from file {idx_file}: {ex}")
@@ -116,7 +129,7 @@ def load_data(idx_file: Path) -> NDArray:
                 count=-1,
                 offset=header_length,
             ).reshape(*header.dim_sizes)
-        return data
+        return data.astype(data.dtype.newbyteorder("="))
     except OSError as ex:
         logger.warning(f"Error loading data from file {idx_file}: {ex}")
         raise ParseError from ex

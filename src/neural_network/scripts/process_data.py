@@ -39,6 +39,9 @@ def main() -> None:
             dataset_config=dataset_config,
             overwrite=args.overwrite,
         )
+    except (DataError, FileNotFoundError) as ex:
+        logger.error(f"Failed to download dataset: {ex}")
+        sys.exit(1)
     except (yaml.YAMLError, OSError) as ex:
         logger.error(f"Failed to parse YAML file {args.dataset_config_path}: {ex}")
         sys.exit(1)
@@ -46,9 +49,6 @@ def main() -> None:
         logger.error(
             f"Dataset configuration validation failed for {args.dataset_config_path}: {ex}"
         )
-        sys.exit(1)
-    except (DataError, FileNotFoundError) as ex:
-        logger.error(f"Failed to download dataset: {ex}")
         sys.exit(1)
 
 

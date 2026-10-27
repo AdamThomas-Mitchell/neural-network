@@ -36,12 +36,12 @@ dtype_byte_length_map: dict[DataType, int] = {
 
 
 dtype_ntype_map = {
-    DataType.u8: np.uint8,
-    DataType.i8: np.int8,
-    DataType.i16: np.int16,
-    DataType.i32: np.int32,
-    DataType.f32: np.float32,
-    DataType.f64: np.float64,
+    DataType.u8: np.dtype(np.uint8).newbyteorder(">"),
+    DataType.i8: np.dtype(np.int8).newbyteorder(">"),
+    DataType.i16: np.dtype(np.int16).newbyteorder(">"),
+    DataType.i32: np.dtype(np.int32).newbyteorder(">"),
+    DataType.f32: np.dtype(np.float32).newbyteorder(">"),
+    DataType.f64: np.dtype(np.float64).newbyteorder(">"),
 }
 
 
@@ -50,7 +50,3 @@ class Header:
     data_type: DataType
     n_dim: int
     dim_sizes: list[int]
-
-
-MAGIC = b"\x00\x00"
-DIM_SIZE_DTYPE = DataType.i32
