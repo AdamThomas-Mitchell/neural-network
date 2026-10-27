@@ -68,6 +68,10 @@ Yeah fuck it, I'm over-engineering this processing step atm. Just have one funct
 ## 27/10/26
 Think I've finished the processing step now. Had claude help me with the tests. Got stuck on debugging the idx parser, helped me there too. Somwhat disheartening it can do what I struggle with instantly but silver lining is that getting stuck is a choice. I'll open a PR and set up Claude to review on Github. Wanna do a dataset regsitry next and some tidying up before moving on the model. Although may need to do a dataloader before that anyway.
 
+I'm noticing scope creep on my tasks. I should make better use of writing constrained tickets, take care of task at hand, write new tickets for any ideas or tech debt after. Spending too much time on each individual task because it grows multiple arms and legs. Will require some forethought and planning.
+
+Goal for next time: Set up Claude for code review.
+
 
 ### Actions:
 - Properly configure MyPy pre-commit hook.
