@@ -1,6 +1,6 @@
 [project]
 name = "neural-network"
-version = "0.2.1"
+version = "0.3.0"
 description = "A feed-forward neural network implmentation built from scratch in Python"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -85,3 +85,4 @@ exclude_lines = [
 
 [project.scripts]
 download-data = "neural_network.scripts.download_data:main"
+process_data = "neural_network.scripts.process_data:main"
