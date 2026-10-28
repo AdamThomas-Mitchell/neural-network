@@ -73,6 +73,10 @@ I'm noticing scope creep on my tasks. I should make better use of writing constr
 Goal for next time: Set up Claude for code review.
 
 
+## 28/10/26
+Made some good progress setting up claude code review. Seems to not quite be working on my current data preprocessing branch though. Need to look into that but done for now. Still need to be more disciplined about defining bite sized chunks of work and avoiding scope creep.
+
+
 ### Actions:
 - Properly configure MyPy pre-commit hook.
 - Set up Claude code on GitHub to review PRs.
