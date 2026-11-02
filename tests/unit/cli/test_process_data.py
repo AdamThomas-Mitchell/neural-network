@@ -100,24 +100,53 @@ class TestMain:
     ):
         config = write_config(tmp_path, tmp_path / "nope", processed_data_dir)
 
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
+        with patch.object(process_data, "logger") as mock_logger:
             with pytest.raises(SystemExit) as exc:
                 run_main(monkeypatch, config)
 
         assert exc.value.code == 1
-        mock_process.assert_not_called()
+        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
 
-    def test_missing_processed_data_dir_exits(
+    def test_raw_data_loc_that_is_a_file_exits(
+        self, monkeypatch, tmp_path: Path, processed_data_dir: Path
+    ):
+        not_a_dir = tmp_path / "file"
+        not_a_dir.write_text("x")
+        config = write_config(tmp_path, not_a_dir, processed_data_dir)
+
+        with patch.object(process_data, "logger") as mock_logger:
+            with pytest.raises(SystemExit) as exc:
+                run_main(monkeypatch, config)
+
+        assert exc.value.code == 1
+        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
+
+    def test_missing_processed_data_dir_is_accepted(
         self, monkeypatch, tmp_path: Path, raw_data_dir: Path
     ):
-        config = write_config(tmp_path, raw_data_dir, tmp_path / "nope")
+        missing_dir = tmp_path / "nope"
+        config = write_config(tmp_path, raw_data_dir, missing_dir)
 
         with patch.object(process_data, "process_mnist_dataset") as mock_process:
+            run_main(monkeypatch, config)
+
+        dataset_config = mock_process.call_args.kwargs["dataset_config"]
+        assert dataset_config.processed_data_loc == missing_dir
+
+    def test_processed_data_loc_that_is_a_file_exits(
+        self, monkeypatch, tmp_path: Path, raw_data_dir: Path
+    ):
+        (raw_data_dir / "images.gz").touch()
+        not_a_dir = tmp_path / "file"
+        not_a_dir.write_text("x")
+        config = write_config(tmp_path, raw_data_dir, not_a_dir)
+
+        with patch.object(process_data, "logger") as mock_logger:
             with pytest.raises(SystemExit) as exc:
                 run_main(monkeypatch, config)
 
         assert exc.value.code == 1
-        mock_process.assert_not_called()
+        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
 
     def test_invalid_yaml_exits(self, monkeypatch, tmp_path: Path):
         bad = tmp_path / "bad.yaml"

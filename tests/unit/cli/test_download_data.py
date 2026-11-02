@@ -5,6 +5,7 @@ import pytest
 
 from neural_network.cli import download_data
 from neural_network.config.data import DatasetConfig
+from neural_network.data import download
 from neural_network.errors import DownloadError
 
 
@@ -77,16 +78,16 @@ class TestMain:
         assert exc.value.code == 1
         mock_download.assert_not_called()
 
-    def test_missing_raw_data_dir_exits(self, monkeypatch, tmp_path: Path):
+    def test_missing_raw_data_dir_is_accepted(self, monkeypatch, tmp_path: Path):
+        missing_dir = tmp_path / "nope"
         config = tmp_path / "config.yaml"
-        config.write_text(VALID_YAML.format(raw_data_loc=tmp_path / "nope"))
+        config.write_text(VALID_YAML.format(raw_data_loc=missing_dir))
 
         with patch.object(download_data, "download_dataset") as mock_download:
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, config)
+            run_main(monkeypatch, config)
 
-        assert exc.value.code == 1
-        mock_download.assert_not_called()
+        dataset_config = mock_download.call_args.kwargs["dataset_config"]
+        assert dataset_config.raw_data_loc == missing_dir
 
     def test_raw_data_loc_that_is_a_file_exits(self, monkeypatch, tmp_path: Path):
         not_a_dir = tmp_path / "file"
@@ -94,12 +95,16 @@ class TestMain:
         config = tmp_path / "config.yaml"
         config.write_text(VALID_YAML.format(raw_data_loc=not_a_dir))
 
-        with patch.object(download_data, "download_dataset") as mock_download:
+        with (
+            patch.object(download, "urlopen") as mock_urlopen,
+            patch.object(download_data, "logger") as mock_logger,
+        ):
             with pytest.raises(SystemExit) as exc:
                 run_main(monkeypatch, config)
 
         assert exc.value.code == 1
-        mock_download.assert_not_called()
+        mock_urlopen.assert_not_called()
+        assert "Failed to download dataset" in mock_logger.error.call_args.args[0]
 
     def test_invalid_yaml_exits(self, monkeypatch, tmp_path: Path):
         bad = tmp_path / "bad.yaml"

@@ -40,7 +40,7 @@ def main() -> None:
             overwrite=args.overwrite,
         )
     except (DataError, FileNotFoundError) as ex:
-        logger.error(f"Failed to download dataset: {ex}")
+        logger.error(f"Failed to process dataset: {ex}")
         sys.exit(1)
     except (yaml.YAMLError, OSError) as ex:
         logger.error(f"Failed to parse YAML file {args.dataset_config_path}: {ex}")
