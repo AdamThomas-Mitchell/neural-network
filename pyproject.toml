@@ -1,6 +1,6 @@
 [project]
 name = "neural-network"
-version = "0.2.0"
+version = "0.3.0"
 description = "A feed-forward neural network implmentation built from scratch in Python"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -9,6 +9,7 @@ dependencies = [
     "matplotlib>=3.11.1",
     "numpy>=2.4.2",
     "pydantic>=2.13.5",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -83,4 +84,5 @@ exclude_lines = [
 ]
 
 [project.scripts]
-download-data = "neural_network.scripts.download_data:main"
+download-data = "neural_network.cli.download_data:main"
+process-data = "neural_network.cli.process_data:main"
