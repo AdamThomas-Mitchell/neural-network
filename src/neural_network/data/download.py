@@ -7,7 +7,7 @@ from urllib.request import urlopen
 from loguru import logger
 
 from neural_network.config.data import DatasetConfig
-from neural_network.data.utils import delete_file
+from neural_network.data.utils import create_directory, delete_file
 from neural_network.errors import (
     DownloadError,
     ReadError,
@@ -229,19 +229,18 @@ def download_dataset(dataset_config: DatasetConfig, overwrite: bool = False) -> 
 
     Args:
         dataset_config (DatasetConfig): Configuration for the dataset to download.
-        output_dirpath (Path): Path to local directory where files will be downloaded.
-            Must be a valid existing directory.
+            Its raw data directory is created if it does not exist.
         overwrite (bool, optional): Whether existing files should be overwritten.
             Defaults to False.
 
     Raises:
-        NotADirectoryError: If given output directory is not valid.
+        WriteError: If the raw data directory cannot be created.
         DownloadError: If any file(s) are not successfully downloaded.
     """
     output_dirpath: Path = dataset_config.raw_data_loc
     logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
 
-    output_dirpath.mkdir(parents=True, exist_ok=True)
+    create_directory(output_dirpath)
 
     downloaded_files: set[str] = set()
     for file_info in dataset_config.files:

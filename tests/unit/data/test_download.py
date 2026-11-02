@@ -243,22 +243,24 @@ class TestDownloadFile:
 
 
 class TestDownloadDataset:
-    def test_missing_raw_data_dir_raises(self, tmp_path: Path):
-        raw = tmp_path / "raw"
-        raw.mkdir()
+    def test_creates_missing_raw_data_dir(self, tmp_path: Path):
+        raw = tmp_path / "parent" / "raw"
         config = make_config(raw, ["a"])
-        raw.rmdir()
-        with pytest.raises(NotADirectoryError):
+        with patch.object(download, "_download_file") as mock:
             download.download_dataset(config)
 
-    def test_raw_data_loc_replaced_by_file_raises(self, tmp_path: Path):
+        assert raw.is_dir()
+        mock.assert_called_once()
+
+    def test_raw_data_loc_that_is_a_file_raises(self, tmp_path: Path):
         raw = tmp_path / "raw"
-        raw.mkdir()
-        config = make_config(raw, ["a"])
-        raw.rmdir()
         raw.write_text("x")
-        with pytest.raises(NotADirectoryError):
-            download.download_dataset(config)
+        config = make_config(raw, ["a"])
+        with patch.object(download, "_download_file") as mock:
+            with pytest.raises(WriteError):
+                download.download_dataset(config)
+
+        mock.assert_not_called()
 
     def test_downloads_all_files_from_first_mirror(self, tmp_path: Path):
         config = make_config(tmp_path, ["a", "b"], {"a": "sum-a"})

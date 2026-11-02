@@ -266,6 +266,50 @@ class TestProcessMnistDataset:
         assert "images.gz" not in str(exc_info.value)
         mock.assert_not_called()
 
+    def test_missing_raw_files_does_not_create_processed_dir(
+        self, raw_dir: Path, tmp_path: Path
+    ):
+        processed = tmp_path / "new_processed"
+        config = make_config(raw_dir, processed, ["images"])
+
+        with pytest.raises(FileNotFoundError):
+            process.process_mnist_dataset(config)
+
+        assert not processed.exists()
+
+    @pytest.mark.parametrize("raw_is_file", [True, False])
+    def test_unreadable_raw_dir_raises_read_error(
+        self, tmp_path: Path, processed_dir: Path, raw_is_file: bool
+    ):
+        raw = tmp_path / "raw_path"
+        if raw_is_file:
+            raw.write_text("x")
+        config = make_config(raw, processed_dir, ["images"])
+
+        with pytest.raises(ReadError):
+            process.process_mnist_dataset(config)
+
+    def test_creates_missing_processed_dir(self, raw_dir: Path, tmp_path: Path):
+        processed = tmp_path / "new_processed"
+        config = make_config(raw_dir, processed, ["images"])
+        (raw_dir / "images.gz").touch()
+
+        with patch.object(process, "_process_mnist_file"):
+            process.process_mnist_dataset(config)
+
+        assert processed.is_dir()
+
+    def test_processed_loc_that_is_a_file_raises_write_error(
+        self, raw_dir: Path, tmp_path: Path
+    ):
+        processed = tmp_path / "processed_file"
+        processed.write_text("x")
+        config = make_config(raw_dir, processed, ["images"])
+        (raw_dir / "images.gz").touch()
+
+        with pytest.raises(WriteError):
+            process.process_mnist_dataset(config)
+
     def test_skips_existing_output_without_overwrite(
         self, raw_dir: Path, processed_dir: Path
     ):

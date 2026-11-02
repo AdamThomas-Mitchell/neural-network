@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from neural_network.config.data import DatasetConfig
 from neural_network.data.idx import load_data
-from neural_network.data.utils import delete_file
+from neural_network.data.utils import create_directory, delete_file
 from neural_network.errors import (
     InvalidFileError,
     ReadError,
@@ -103,10 +103,22 @@ def _process_mnist_file(
 def process_mnist_dataset(
     dataset_config: DatasetConfig, overwrite: bool = False
 ) -> None:
+    """Convert a dataset's raw gzipped IDX files to NumPy files.
+
+    Args:
+        dataset_config (DatasetConfig): Configuration for the dataset to process.
+            Its processed data directory is created if it does not exist.
+        overwrite (bool, optional): Whether existing files should be overwritten.
+            Defaults to False.
+
+    Raises:
+        ReadError: If the raw data directory cannot be read.
+        FileNotFoundError: If any raw data files are missing.
+        WriteError: If the processed data directory cannot be created.
+    """
     logger.info(f"Processing {dataset_config.name} dataset")
 
     output_dirpath: Path = dataset_config.processed_data_loc
-    output_dirpath.mkdir(parents=True, exist_ok=True)
 
     expected_raw_files: list[Path] = [
         dataset_config.raw_data_loc / f.file_name for f in dataset_config.files
@@ -116,13 +128,19 @@ def process_mnist_dataset(
     ]
 
     missing_files = []
-    existing_raw_files = set(dataset_config.raw_data_loc.iterdir())
+    try:
+        existing_raw_files = set(dataset_config.raw_data_loc.iterdir())
+    except OSError as ex:
+        logger.warning(f"Unable to read raw data directory: {ex}")
+        raise ReadError(f"Unable to read raw data directory: {ex}") from ex
     for f in expected_raw_files:
         if f not in existing_raw_files:
             missing_files.append(f.name)
     if missing_files:
         logger.warning(f"Raw data files could not be found: {missing_files}")
         raise FileNotFoundError(f"Raw data files could not be found: {missing_files}")
+
+    create_directory(output_dirpath)
 
     for in_file, out_file in zip(expected_raw_files, processed_files, strict=True):
         if out_file.is_file() and not overwrite:
