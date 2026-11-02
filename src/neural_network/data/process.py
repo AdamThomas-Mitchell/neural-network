@@ -88,11 +88,13 @@ def _convert_idx_to_np(
         raise WriteError(f"Unable to write to {output_filepath}") from ex
 
 
-def _process_mnist_file(input_file: Path, output_file: Path) -> None:
+def _process_mnist_file(
+    input_file: Path, output_file: Path, overwrite: bool = False
+) -> None:
     with tempfile.TemporaryDirectory() as t_dir:
         t_file = Path(t_dir) / "unzipped.idx"
         _unzip_gzip_file(input_file, t_file)
-        _convert_idx_to_np(t_file, output_file)
+        _convert_idx_to_np(t_file, output_file, overwrite)
     logger.success(
         f"Successfully processed file {input_file} and saved output to {output_file}"
     )
@@ -124,6 +126,6 @@ def process_mnist_dataset(
         if out_file.is_file() and not overwrite:
             logger.info(f"File {out_file} already exists; skipping")
             continue
-        _process_mnist_file(in_file, out_file)
+        _process_mnist_file(in_file, out_file, overwrite=overwrite)
 
     logger.success(f"Successfully processed all files in {dataset_config.name} dataset")

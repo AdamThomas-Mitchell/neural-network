@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import pytest
 
+from neural_network.cli import process_data
 from neural_network.config.data import DatasetConfig
 from neural_network.errors import ParseError
-from neural_network.scripts import process_data
 
 
 VALID_YAML = """

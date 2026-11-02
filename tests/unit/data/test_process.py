@@ -235,8 +235,8 @@ class TestProcessMnistDataset:
             process.process_mnist_dataset(config)
 
         assert mock.call_args_list == [
-            call(raw_dir / "images.gz", processed_dir / "images.npy"),
-            call(raw_dir / "labels.gz", processed_dir / "labels.npy"),
+            call(raw_dir / "images.gz", processed_dir / "images.npy", overwrite=False),
+            call(raw_dir / "labels.gz", processed_dir / "labels.npy", overwrite=False),
         ]
 
     def test_finds_raw_files_regardless_of_directory_order(
@@ -278,7 +278,7 @@ class TestProcessMnistDataset:
             process.process_mnist_dataset(config)
 
         mock.assert_called_once_with(
-            raw_dir / "labels.gz", processed_dir / "labels.npy"
+            raw_dir / "labels.gz", processed_dir / "labels.npy", overwrite=False
         )
 
     def test_reprocesses_existing_output_with_overwrite(
@@ -292,7 +292,7 @@ class TestProcessMnistDataset:
             process.process_mnist_dataset(config, overwrite=True)
 
         mock.assert_called_once_with(
-            raw_dir / "images.gz", processed_dir / "images.npy"
+            raw_dir / "images.gz", processed_dir / "images.npy", overwrite=True
         )
 
     def test_end_to_end(self, raw_dir: Path, processed_dir: Path):
@@ -314,3 +314,18 @@ class TestProcessMnistDataset:
             process.process_mnist_dataset(config)
 
         mock.assert_not_called()
+
+    def test_rerun_with_overwrite_replaces_processed_files(
+        self, raw_dir: Path, processed_dir: Path
+    ):
+        config = make_config(raw_dir, processed_dir, ["images"])
+        make_gzip_file(raw_dir / "images.gz", make_idx_bytes())
+        process.process_mnist_dataset(config)
+
+        updated_array = ARRAY + 1
+        make_gzip_file(raw_dir / "images.gz", make_idx_bytes(updated_array))
+        process.process_mnist_dataset(config, overwrite=True)
+
+        np.testing.assert_array_equal(
+            np.load(processed_dir / "images.npy"), updated_array
+        )
