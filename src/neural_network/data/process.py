@@ -105,12 +105,14 @@ def process_mnist_dataset(
 ) -> None:
     logger.info(f"Processing {dataset_config.name} dataset")
 
+    output_dirpath: Path = dataset_config.processed_data_loc
+    output_dirpath.mkdir(parents=True, exist_ok=True)
+
     expected_raw_files: list[Path] = [
         dataset_config.raw_data_loc / f.file_name for f in dataset_config.files
     ]
     processed_files: list[Path] = [
-        dataset_config.processed_data_loc / f"{f.label}.npy"
-        for f in dataset_config.files
+        output_dirpath / f"{f.label}.npy" for f in dataset_config.files
     ]
 
     missing_files = []

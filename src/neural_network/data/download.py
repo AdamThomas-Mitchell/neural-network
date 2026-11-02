@@ -239,12 +239,9 @@ def download_dataset(dataset_config: DatasetConfig, overwrite: bool = False) -> 
         DownloadError: If any file(s) are not successfully downloaded.
     """
     output_dirpath: Path = dataset_config.raw_data_loc
-
     logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
 
-    if not output_dirpath.is_dir():
-        logger.error(f"{output_dirpath} is not a valid directory")
-        raise NotADirectoryError(f"{output_dirpath} is not a valid directory")
+    output_dirpath.mkdir(parents=True, exist_ok=True)
 
     downloaded_files: set[str] = set()
     for file_info in dataset_config.files:
