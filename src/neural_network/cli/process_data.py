@@ -8,15 +8,17 @@ from pydantic import ValidationError
 
 from neural_network.config.data import DatasetConfig
 from neural_network.data.process import process_mnist_dataset
+from neural_network.data.registry import dataset_registry
 from neural_network.errors import DataError
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "dataset_config_path",
-        type=Path,
-        help="Path to the dataset configuration file.",
+        "dataset_name",
+        type=str,
+        choices=[*dataset_registry.keys()],
+        help="Name of the dataset to download.",
     )
     parser.add_argument(
         "--overwrite",
@@ -25,12 +27,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.dataset_config_path.is_file():
-        logger.error(f"{args.dataset_config_path} is not a valid file")
+    dataset_config: Path = dataset_registry[args.dataset_name]
+
+    if not dataset_config.is_file():
+        logger.error(f"{dataset_config} is not a valid file")
         sys.exit(1)
 
     try:
-        with open(args.dataset_config_path) as f:
+        with open(dataset_config) as f:
             yaml_contents = yaml.safe_load(f)
 
         dataset_config: DatasetConfig = DatasetConfig.model_validate(yaml_contents)
@@ -43,11 +47,11 @@ def main() -> None:
         logger.error(f"Failed to process dataset: {ex}")
         sys.exit(1)
     except (yaml.YAMLError, OSError) as ex:
-        logger.error(f"Failed to parse YAML file {args.dataset_config_path}: {ex}")
+        logger.error(f"Failed to parse YAML file {dataset_config}: {ex}")
         sys.exit(1)
     except ValidationError as ex:
         logger.error(
-            f"Dataset configuration validation failed for {args.dataset_config_path}: {ex}"
+            f"Dataset configuration validation failed for {dataset_config}: {ex}"
         )
         sys.exit(1)
 
