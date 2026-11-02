@@ -11,7 +11,7 @@ Build a fully functional end-to-end neural network project without using deep le
 ## Features (Planned)
 
 - Data download for MNIST and Fashion-MNIST datasets - COMPLETED (v0.2.0)
-- Data pre-processing
+- Data pre-processing (v0.3.0)
 - Data visualisation
 - Forward propagation
 - Backpropagation algorithm
