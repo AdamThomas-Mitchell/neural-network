@@ -178,3 +178,15 @@ class TestMain:
 
         assert exc.value.code == 2
         mock_download.assert_not_called()
+
+    def test_help_describes_command(self, monkeypatch, capsys):
+        monkeypatch.setattr("sys.argv", ["download-data", "--help"])
+
+        with pytest.raises(SystemExit) as exc:
+            download_data.main()
+
+        help_text = capsys.readouterr().out
+        assert exc.value.code == 0
+        assert "raw_data_loc" in help_text
+        assert "--overwrite" in help_text
+        assert "Example: download-data mnist" in help_text

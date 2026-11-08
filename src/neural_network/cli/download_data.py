@@ -1,57 +1,50 @@
 import argparse
 import sys
-from pathlib import Path
 
-import yaml
 from loguru import logger
-from pydantic import ValidationError
 
-from neural_network.config.data import DatasetConfig
+from neural_network.config.loader import load_dataset_config
 from neural_network.data.download import download_dataset
 from neural_network.data.registry import DATASET_REGISTRY
 from neural_network.errors import DataError
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    """Run the ``download-data`` command to download a dataset's raw files.
+
+    Raises:
+        SystemExit: With status 1 if the config cannot be loaded or the download
+            fails, or status 2 if the command-line arguments are invalid.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Download a dataset's raw files from the mirrors listed in its config. "
+            "Files are saved to the config's raw_data_loc."
+        ),
+        epilog="Example: download-data mnist",
+    )
     parser.add_argument(
         "dataset_name",
-        type=str,
-        choices=[*DATASET_REGISTRY.keys()],
+        choices=list(DATASET_REGISTRY),
         help="Name of the dataset to download.",
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Whether existing files should be overwritten.",
+        help="Download files again even if they already exist.",
     )
     args = parser.parse_args()
 
-    dataset_config_file: Path = DATASET_REGISTRY[args.dataset_name]
-
-    if not dataset_config_file.is_file():
-        logger.error(f"{dataset_config_file} is not a valid file")
-        sys.exit(1)
+    dataset_config_file = DATASET_REGISTRY[args.dataset_name]
 
     try:
-        with open(dataset_config_file) as f:
-            yaml_contents = yaml.safe_load(f)
-
-        dataset_config: DatasetConfig = DatasetConfig.model_validate(yaml_contents)
+        dataset_config = load_dataset_config(dataset_config_file)
 
         download_dataset(
             dataset_config=dataset_config,
             overwrite=args.overwrite,
         )
-    except (yaml.YAMLError, OSError) as ex:
-        logger.error(f"Failed to parse YAML file {dataset_config_file}: {ex}")
-        sys.exit(1)
-    except ValidationError as ex:
-        logger.error(
-            f"Dataset configuration validation failed for {dataset_config_file}: {ex}"
-        )
-        sys.exit(1)
-    except DataError as ex:
+    except (DataError, FileNotFoundError) as ex:
         logger.error(f"Failed to download dataset: {ex}")
         sys.exit(1)
 
