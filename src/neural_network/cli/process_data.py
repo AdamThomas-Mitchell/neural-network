@@ -47,9 +47,6 @@ def main() -> None:
     except DataError as ex:
         logger.error(f"Failed to process dataset: {ex}")
         sys.exit(1)
-    except OSError as ex:
-        logger.error(f"Failed to parse YAML file {dataset_config_file}: {ex}")
-        sys.exit(1)
 
 
 if __name__ == "__main__":

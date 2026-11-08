@@ -1,5 +1,6 @@
 import hashlib
 import io
+from http.client import IncompleteRead
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -9,6 +10,7 @@ import pytest
 from neural_network.config.data import DatasetConfig, FileInfo
 from neural_network.data import download
 from neural_network.errors import (
+    DeleteError,
     DownloadError,
     ReadError,
     WriteError,
@@ -66,17 +68,33 @@ class TestVerifyFullFileDownload:
             download._verify_full_file_download(f, len(CONTENT) + 1)
         assert not f.exists()
 
-    def test_missing_file_raises(self, tmp_path: Path):
-        with pytest.raises(FileNotFoundError):
-            download._verify_full_file_download(tmp_path / "missing.bin", 5)
+    def test_mismatch_message_reports_sizes(self, tmp_path: Path):
+        f = tmp_path / "a.bin"
+        f.write_bytes(CONTENT)
+        with pytest.raises(
+            DownloadError, match=f"expected 100 bytes, got {len(CONTENT)}"
+        ):
+            download._verify_full_file_download(f, 100)
+
+    def test_missing_file_raises_read_error(self, tmp_path: Path):
+        missing = tmp_path / "missing.bin"
+        with pytest.raises(ReadError, match="missing.bin") as exc:
+            download._verify_full_file_download(missing, 5)
+        assert isinstance(exc.value.__cause__, FileNotFoundError)
 
     def test_stat_error_raises_read_error(self, tmp_path: Path):
         f = tmp_path / "a.bin"
         f.write_bytes(CONTENT)
-        with patch.object(Path, "is_file", return_value=True):
-            with patch.object(Path, "stat", side_effect=OSError("boom")):
-                with pytest.raises(ReadError):
-                    download._verify_full_file_download(f, len(CONTENT))
+        with patch.object(Path, "stat", side_effect=OSError("boom")):
+            with pytest.raises(ReadError, match="boom"):
+                download._verify_full_file_download(f, len(CONTENT))
+
+    def test_delete_failure_raises_delete_error(self, tmp_path: Path):
+        f = tmp_path / "a.bin"
+        f.write_bytes(CONTENT)
+        with patch.object(Path, "unlink", side_effect=OSError("locked")):
+            with pytest.raises(DeleteError):
+                download._verify_full_file_download(f, len(CONTENT) + 1)
 
 
 class TestCalculateFileChecksum:
@@ -91,15 +109,16 @@ class TestCalculateFileChecksum:
         f.write_bytes(big)
         assert download._calculate_file_checksum(f) == hashlib.sha256(big).hexdigest()
 
-    def test_missing_file_raises_filenotfound_error(self, tmp_path: Path):
-        with pytest.raises(FileNotFoundError):
+    def test_missing_file_raises_read_error(self, tmp_path: Path):
+        with pytest.raises(ReadError, match="missing.bin") as exc:
             download._calculate_file_checksum(tmp_path / "missing.bin")
+        assert isinstance(exc.value.__cause__, FileNotFoundError)
 
     def test_read_error_raises_read_error(self, tmp_path: Path):
         f = tmp_path / "a.bin"
         f.write_bytes(CONTENT)
         with patch("builtins.open", side_effect=OSError("boom")):
-            with pytest.raises(ReadError):
+            with pytest.raises(ReadError, match="boom"):
                 download._calculate_file_checksum(f)
 
 
@@ -110,8 +129,8 @@ class TestVerifyDownloadedFileIntegrity:
         download._verify_downloaded_file_integrity(f, CONTENT_SHA256)
         assert f.exists()
 
-    def test_missing_file_raises_file_not_found_error(self, tmp_path: Path):
-        with pytest.raises(FileNotFoundError):
+    def test_missing_file_raises_read_error(self, tmp_path: Path):
+        with pytest.raises(ReadError, match="missing.bin"):
             download._verify_downloaded_file_integrity(
                 tmp_path / "missing.bin", CONTENT_SHA256
             )
@@ -124,6 +143,17 @@ class TestVerifyDownloadedFileIntegrity:
         with pytest.raises(DownloadError):
             download._verify_downloaded_file_integrity(f, "0" * 64)
         assert not f.exists()
+
+
+class TestParseContentLength:
+    @pytest.mark.parametrize(
+        ("header_value", "expected"),
+        [("11", 11), ("0", 0), (None, None), ("abc", None), ("", None), ("-1", None)],
+    )
+    def test_parses_valid_values_and_ignores_invalid_ones(
+        self, header_value: str | None, expected: int | None
+    ):
+        assert download._parse_content_length(header_value) == expected
 
 
 class TestDownloadFileSingleAttempt:
@@ -189,11 +219,53 @@ class TestDownloadFileSingleAttempt:
                 download._download_file_single_attempt("http://x/a.bin", out)
         assert not out.exists()
 
+    def test_invalid_content_length_skips_size_check(self, tmp_path: Path):
+        out = tmp_path / "a.bin"
+        response = make_response(content_length=None)
+        with (
+            patch.object(download, "urlopen", return_value=response),
+            patch.object(response, "getheader", return_value="not-a-number"),
+        ):
+            download._download_file_single_attempt("http://x/a.bin", out)
+        assert out.read_bytes() == CONTENT
+
     @pytest.mark.parametrize("exc", [URLError("down"), TimeoutError("slow")])
     def test_network_error_raises_download_error(self, tmp_path: Path, exc):
         out = tmp_path / "a.bin"
         with patch.object(download, "urlopen", side_effect=exc):
+            with pytest.raises(DownloadError, match="http://x/a.bin"):
+                download._download_file_single_attempt("http://x/a.bin", out)
+        assert not out.exists()
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ConnectionResetError("reset"),
+            TimeoutError("slow"),
+            IncompleteRead(b"partial", 100),
+        ],
+    )
+    def test_network_error_mid_transfer_raises_download_error_and_cleans_up(
+        self, tmp_path: Path, exc
+    ):
+        out = tmp_path / "a.bin"
+        with (
+            patch.object(download, "urlopen", return_value=make_response()),
+            patch.object(download.shutil, "copyfileobj", side_effect=exc),
+        ):
             with pytest.raises(DownloadError):
+                download._download_file_single_attempt("http://x/a.bin", out)
+        assert not out.exists()
+
+    def test_disk_error_mid_transfer_raises_write_error_and_cleans_up(
+        self, tmp_path: Path
+    ):
+        out = tmp_path / "a.bin"
+        with (
+            patch.object(download, "urlopen", return_value=make_response()),
+            patch.object(download.shutil, "copyfileobj", side_effect=OSError("full")),
+        ):
+            with pytest.raises(WriteError, match="full"):
                 download._download_file_single_attempt("http://x/a.bin", out)
         assert not out.exists()
 
@@ -302,14 +374,30 @@ class TestDownloadDataset:
             with pytest.raises(DownloadError, match="'a'"):
                 download.download_dataset(config)
 
-    def test_write_error_stops_trying_mirrors(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "local_error", [WriteError("disk"), ReadError("disk"), DeleteError("disk")]
+    )
+    def test_local_file_error_stops_trying_mirrors(
+        self, tmp_path: Path, local_error: Exception
+    ):
         config = make_config(tmp_path, ["a"])
-        with patch.object(
-            download, "_download_file", side_effect=WriteError("disk")
-        ) as mock:
-            with pytest.raises(DownloadError):
+        with patch.object(download, "_download_file", side_effect=local_error) as mock:
+            with pytest.raises(DownloadError, match="'a'"):
                 download.download_dataset(config)
         assert mock.call_count == 1
+
+    def test_local_file_error_does_not_stop_other_files(self, tmp_path: Path):
+        config = make_config(tmp_path, ["bad", "good"])
+
+        def fake(url, output, **kwargs):
+            if url.endswith("bad"):
+                raise ReadError("disk")
+
+        with patch.object(download, "_download_file", side_effect=fake) as mock:
+            with pytest.raises(DownloadError, match="'bad'"):
+                download.download_dataset(config)
+
+        assert mock.call_args_list[-1].args[0] == "https://mirror1.example.com/good"
 
     def test_reports_only_failed_files(self, tmp_path: Path):
         config = make_config(tmp_path, ["good", "bad"])

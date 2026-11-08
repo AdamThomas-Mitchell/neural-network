@@ -1,5 +1,6 @@
 import hashlib
 import shutil
+from http.client import HTTPException
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -9,6 +10,7 @@ from loguru import logger
 from neural_network.config.data import DatasetConfig
 from neural_network.data.utils import create_directory, delete_file
 from neural_network.errors import (
+    DeleteError,
     DownloadError,
     ReadError,
     WriteError,
@@ -25,36 +27,30 @@ def _verify_full_file_download(
         expected_file_size (int): Expected size of the file.
 
     Raises:
-        FileNotFoundError: If file to check does not exist.
+        ReadError: If the file's size cannot be read, e.g. because it does not exist.
         DownloadError: If the downloaded file is not the correct size.
+        DeleteError: If the incomplete file cannot be deleted.
     """
     logger.debug(f"Verifying downloaded file size for {downloaded_filepath}")
 
-    if not downloaded_filepath.is_file():
-        logger.warning(
-            f"Cannot verify file size for {downloaded_filepath} - file does not exist"
-        )
-        raise FileNotFoundError(
-            f"Cannot verify file size for {downloaded_filepath} - file does not exist"
-        )
-
-    actual_file_size: int | None = None
     try:
-        actual_file_size = downloaded_filepath.stat().st_size
+        actual_file_size: int = downloaded_filepath.stat().st_size
     except OSError as ex:
-        logger.warning(
-            f"Error occurred while fetching file size from {downloaded_filepath}: {ex}"
-        )
-        raise ReadError from ex
+        logger.warning(f"Unable to read file size of {downloaded_filepath}: {ex}")
+        raise ReadError(
+            f"Unable to read file size of {downloaded_filepath}: {ex}"
+        ) from ex
 
-    if (
-        expected_file_size is not None
-        and actual_file_size is not None
-        and actual_file_size != expected_file_size
-    ):
-        logger.warning(f"Incomplete file download from to {downloaded_filepath}")
+    if actual_file_size != expected_file_size:
+        logger.warning(
+            f"Incomplete file download to {downloaded_filepath}: expected "
+            f"{expected_file_size} bytes, got {actual_file_size}"
+        )
         delete_file(downloaded_filepath)
-        raise DownloadError(f"Failed to download file to {downloaded_filepath}")
+        raise DownloadError(
+            f"Incomplete file download to {downloaded_filepath}: expected "
+            f"{expected_file_size} bytes, got {actual_file_size}"
+        )
 
     logger.debug(
         f"Successfully verified downloaded file size for {downloaded_filepath}"
@@ -71,17 +67,9 @@ def _calculate_file_checksum(filepath: Path) -> str:
         str: SHA256 checksum of the file.
 
     Raises:
-        FileNotFoundError: If file does not exist.
+        ReadError: If the file cannot be read, e.g. because it does not exist.
     """
     logger.debug(f"Calculating SHA256 checksum for {filepath}")
-
-    if not filepath.is_file():
-        logger.warning(
-            f"Cannot calculate SHA256 checksum for {filepath} - file does not exist"
-        )
-        raise FileNotFoundError(
-            f"Cannot calculate SHA256 checksum for {filepath} - file does not exist"
-        )
 
     sha256_hash = hashlib.sha256()
     try:
@@ -90,10 +78,10 @@ def _calculate_file_checksum(filepath: Path) -> str:
                 sha256_hash.update(chunk)
             return sha256_hash.hexdigest()
     except OSError as ex:
-        logger.warning(
-            f"Error occurred while calculating checksum for {filepath}: {ex}"
-        )
-        raise ReadError from ex
+        logger.warning(f"Unable to read {filepath} to calculate checksum: {ex}")
+        raise ReadError(
+            f"Unable to read {filepath} to calculate checksum: {ex}"
+        ) from ex
 
 
 def _verify_downloaded_file_integrity(
@@ -106,27 +94,46 @@ def _verify_downloaded_file_integrity(
         expected_checksum (str): Expected SHA256 checksum of the file.
 
     Raises:
-        FileNotFoundError: If file to check does not exist.
+        ReadError: If the file cannot be read, e.g. because it does not exist.
         DownloadError: If the downloaded file has a different checksum than expected.
+        DeleteError: If the corrupted file cannot be deleted.
     """
     logger.debug(f"Verifying downloaded file integrity for {downloaded_filepath}")
 
-    if not downloaded_filepath.is_file():
-        logger.warning(
-            f"Cannot verify integrity for {downloaded_filepath} - file does not exist"
-        )
-        raise FileNotFoundError(
-            f"Cannot verify integrity for {downloaded_filepath} - file does not exist"
-        )
-
     actual_checksum: str = _calculate_file_checksum(downloaded_filepath)
     if actual_checksum != expected_checksum:
+        logger.warning(f"Checksum mismatch for downloaded file {downloaded_filepath}")
         delete_file(downloaded_filepath)
         raise DownloadError(f"Corrupted file download for {downloaded_filepath}")
 
     logger.debug(
         f"Successfully verified downloaded file integrity for {downloaded_filepath}"
     )
+
+
+def _parse_content_length(header_value: str | None) -> int | None:
+    """Parse a ``Content-Length`` header into an expected file size.
+
+    Args:
+        header_value (str | None): Raw header value, or None if the header is absent.
+
+    Returns:
+        int | None: Expected size in bytes, or None if the header is absent or is
+            not a non-negative integer, in which case the size check is skipped.
+    """
+    if header_value is None:
+        return None
+
+    try:
+        content_length = int(header_value)
+    except ValueError:
+        logger.warning(f"Ignoring invalid Content-Length header: {header_value!r}")
+        return None
+
+    if content_length < 0:
+        logger.warning(f"Ignoring negative Content-Length header: {header_value!r}")
+        return None
+    return content_length
 
 
 def _download_file_single_attempt(
@@ -146,8 +153,10 @@ def _download_file_single_attempt(
             Defaults to None.
 
     Raises:
-        DownloadError: If there is an error when attempting file download.
+        DownloadError: If the download fails, is incomplete or is corrupted.
         WriteError: If there is an error when attempting to write the file to disk.
+        ReadError: If the downloaded file cannot be read back for verification.
+        DeleteError: If a failed download cannot be cleaned up.
     """
     logger.info(f"Downloading file from {url} to {output_filepath}")
 
@@ -161,19 +170,20 @@ def _download_file_single_attempt(
             open(output_filepath, "wb") as out_file,
         ):
             shutil.copyfileobj(response, out_file)
+            expected_file_size = _parse_content_length(
+                response.getheader("Content-Length")
+            )
 
-            expected_file_size: int | None = None
-            if url_file_size := response.getheader("Content-Length"):
-                expected_file_size = int(url_file_size)
-
-    except (URLError, TimeoutError) as ex:
+    # Network errors can surface mid-transfer, so they must be caught before the
+    # broader OSError (ConnectionError, TimeoutError and URLError are subclasses).
+    except (URLError, TimeoutError, ConnectionError, HTTPException) as ex:
         logger.warning(f"Error downloading file from {url}: {ex}")
         delete_file(output_filepath)
-        raise DownloadError from ex
+        raise DownloadError(f"Error downloading file from {url}: {ex}") from ex
     except OSError as ex:
         logger.warning(f"Error writing file to {output_filepath}: {ex}")
         delete_file(output_filepath)
-        raise WriteError from ex
+        raise WriteError(f"Error writing file to {output_filepath}: {ex}") from ex
 
     if expected_file_size is not None:
         _verify_full_file_download(output_filepath, expected_file_size)
@@ -202,8 +212,10 @@ def _download_file(
             Defaults to 3.
 
     Raises:
-        DownloadError: If there is an error when attempting file download.
+        DownloadError: If every attempt to download the file fails.
         WriteError: If there is an error when attempting to write the file to disk.
+        ReadError: If the downloaded file cannot be read back for verification.
+        DeleteError: If a failed download cannot be cleaned up.
     """
     attempt: int = 0
     while True:
@@ -235,7 +247,7 @@ def download_dataset(dataset_config: DatasetConfig, overwrite: bool = False) -> 
 
     Raises:
         WriteError: If the raw data directory cannot be created.
-        DownloadError: If any file(s) are not successfully downloaded.
+        DownloadError: If any file(s) are not successfully downloaded and saved.
     """
     output_dirpath: Path = dataset_config.raw_data_loc
     logger.info(f"Downloading {dataset_config.name} dataset files to {output_dirpath}")
@@ -258,15 +270,16 @@ def download_dataset(dataset_config: DatasetConfig, overwrite: bool = False) -> 
                 break
             except DownloadError as ex:
                 logger.warning(f"Failed to download {file_name} from {mirror}: {ex}")
-            except WriteError as ex:
-                logger.warning(f"Failed to write {file_name} to disk: {ex}")
+            except (WriteError, ReadError, DeleteError) as ex:
+                # A local disk problem will not be fixed by trying another mirror.
+                logger.warning(f"Failed to save {file_name} to {output_dirpath}: {ex}")
                 break
 
     files_to_download: set[str] = {f.file_name for f in dataset_config.files}
     if downloaded_files != files_to_download:
-        failed = files_to_download - downloaded_files
-        logger.error(f"Failed to download the following file(s): {str(failed)}")
-        raise DownloadError(f"Failed to download the following file(s): {str(failed)}")
+        failed = sorted(files_to_download - downloaded_files)
+        logger.warning(f"Failed to download the following file(s): {failed}")
+        raise DownloadError(f"Failed to download the following file(s): {failed}")
 
     logger.success(
         f"Successfully downloaded {dataset_config.name} dataset to {output_dirpath}"

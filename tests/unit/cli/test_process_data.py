@@ -9,6 +9,7 @@ from neural_network.data.registry import DATASET_REGISTRY
 from neural_network.errors import (
     DatasetConfigError,
     InvalidFileError,
+    MissingFileError,
     ParseError,
     ReadError,
     WriteError,
@@ -137,12 +138,16 @@ class TestMain:
     def test_missing_raw_files_exits(
         self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
     ):
-        mock_process.side_effect = FileNotFoundError("missing raw files")
+        mock_process.side_effect = MissingFileError("missing raw files")
 
-        with pytest.raises(SystemExit) as exc:
-            run_main(monkeypatch, TEST_DATASET_NAME)
+        with patch.object(process_data, "logger") as mock_logger:
+            with pytest.raises(SystemExit) as exc:
+                run_main(monkeypatch, TEST_DATASET_NAME)
 
         assert exc.value.code == 1
+        message = mock_logger.error.call_args.args[0]
+        assert "Failed to process dataset" in message
+        assert "missing raw files" in message
 
     def test_unexpected_error_is_not_swallowed(
         self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock

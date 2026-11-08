@@ -44,7 +44,7 @@ def main() -> None:
             dataset_config=dataset_config,
             overwrite=args.overwrite,
         )
-    except (DataError, FileNotFoundError) as ex:
+    except DataError as ex:
         logger.error(f"Failed to download dataset: {ex}")
         sys.exit(1)
 
