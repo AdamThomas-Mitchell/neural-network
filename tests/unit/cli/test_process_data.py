@@ -1,217 +1,183 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from neural_network.cli import process_data
 from neural_network.config.data import DatasetConfig
-from neural_network.errors import ParseError
+from neural_network.data.registry import DATASET_REGISTRY
+from neural_network.errors import (
+    DatasetConfigError,
+    InvalidFileError,
+    ParseError,
+    ReadError,
+    WriteError,
+)
 
 
-VALID_YAML = """
-name: test
-mirrors:
-  - https://mirror.example.com/
-files:
-  - label: images
-    file_name: images.gz
-raw_data_loc: {raw_data_loc}
-processed_data_loc: {processed_data_loc}
-"""
-
-
-@pytest.fixture
-def raw_data_dir(tmp_path: Path) -> Path:
-    path = tmp_path / "raw"
-    path.mkdir()
-    return path
+TEST_DATASET_NAME = "test-dataset"
+TEST_CONFIG_PATH = Path("configs/datasets/test.yaml")
 
 
 @pytest.fixture
-def processed_data_dir(tmp_path: Path) -> Path:
-    path = tmp_path / "processed"
-    path.mkdir()
-    return path
-
-
-def write_config(tmp_path: Path, raw_data_loc: Path, processed_data_loc: Path) -> Path:
-    path = tmp_path / "config.yaml"
-    path.write_text(
-        VALID_YAML.format(
-            raw_data_loc=raw_data_loc, processed_data_loc=processed_data_loc
-        )
+def dataset_config(tmp_path: Path) -> DatasetConfig:
+    return DatasetConfig.model_validate(
+        {
+            "name": "test",
+            "mirrors": ["https://mirror.example.com/"],
+            "files": [{"label": "images", "file_name": "images.gz"}],
+            "raw_data_loc": tmp_path / "raw",
+            "processed_data_loc": tmp_path / "processed",
+        }
     )
-    return path
 
 
 @pytest.fixture
-def config_path(tmp_path: Path, raw_data_dir: Path, processed_data_dir: Path) -> Path:
-    return write_config(tmp_path, raw_data_dir, processed_data_dir)
+def mock_load(monkeypatch, dataset_config: DatasetConfig) -> MagicMock:
+    monkeypatch.setitem(
+        process_data.DATASET_REGISTRY, TEST_DATASET_NAME, TEST_CONFIG_PATH
+    )
+    mock = MagicMock(return_value=dataset_config)
+    monkeypatch.setattr(process_data, "load_dataset_config", mock)
+    return mock
 
 
-def run_main(monkeypatch: pytest.MonkeyPatch, *args: object) -> None:
-    monkeypatch.setattr("sys.argv", ["process_data", *map(str, args)])
+@pytest.fixture
+def mock_process(monkeypatch) -> MagicMock:
+    mock = MagicMock()
+    monkeypatch.setattr(process_data, "process_mnist_dataset", mock)
+    return mock
+
+
+def run_main(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
+    monkeypatch.setattr("sys.argv", ["process-data", *args])
     process_data.main()
 
 
 class TestMain:
-    def test_success_calls_process_mnist_dataset(
+    def test_loads_config_registered_under_dataset_name(
+        self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
+    ):
+        run_main(monkeypatch, TEST_DATASET_NAME)
+
+        mock_load.assert_called_once_with(TEST_CONFIG_PATH)
+
+    @pytest.mark.parametrize("dataset_name", list(DATASET_REGISTRY))
+    def test_accepts_every_registered_dataset(
         self,
         monkeypatch,
-        config_path: Path,
-        raw_data_dir: Path,
-        processed_data_dir: Path,
+        mock_load: MagicMock,
+        mock_process: MagicMock,
+        dataset_name: str,
     ):
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
-            run_main(monkeypatch, config_path)
+        run_main(monkeypatch, dataset_name)
 
-        mock_process.assert_called_once()
-        kwargs = mock_process.call_args.kwargs
-        assert isinstance(kwargs["dataset_config"], DatasetConfig)
-        assert kwargs["dataset_config"].name == "test"
-        assert kwargs["dataset_config"].raw_data_loc == raw_data_dir
-        assert kwargs["dataset_config"].processed_data_loc == processed_data_dir
-        assert kwargs["overwrite"] is False
+        mock_load.assert_called_once_with(DATASET_REGISTRY[dataset_name])
 
-    def test_overwrite_flag_is_passed_through(self, monkeypatch, config_path: Path):
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
-            run_main(monkeypatch, config_path, "--overwrite")
+    def test_passes_loaded_config_to_process_mnist_dataset(
+        self,
+        monkeypatch,
+        mock_load: MagicMock,
+        mock_process: MagicMock,
+        dataset_config: DatasetConfig,
+    ):
+        run_main(monkeypatch, TEST_DATASET_NAME)
+
+        mock_process.assert_called_once_with(
+            dataset_config=dataset_config, overwrite=False
+        )
+
+    def test_overwrite_flag_is_passed_through(
+        self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
+    ):
+        run_main(monkeypatch, TEST_DATASET_NAME, "--overwrite")
 
         assert mock_process.call_args.kwargs["overwrite"] is True
 
-    def test_missing_config_file_exits(self, monkeypatch, tmp_path: Path):
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, tmp_path / "missing.yaml")
-
-        assert exc.value.code == 1
-        mock_process.assert_not_called()
-
-    def test_config_path_that_is_a_directory_exits(self, monkeypatch, tmp_path: Path):
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, tmp_path)
-
-        assert exc.value.code == 1
-        mock_process.assert_not_called()
-
-    def test_missing_raw_data_dir_exits(
-        self, monkeypatch, tmp_path: Path, processed_data_dir: Path
+    def test_config_error_exits_without_processing(
+        self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
     ):
-        config = write_config(tmp_path, tmp_path / "nope", processed_data_dir)
+        mock_load.side_effect = DatasetConfigError("bad config")
 
         with patch.object(process_data, "logger") as mock_logger:
             with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, config)
-
-        assert exc.value.code == 1
-        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
-
-    def test_raw_data_loc_that_is_a_file_exits(
-        self, monkeypatch, tmp_path: Path, processed_data_dir: Path
-    ):
-        not_a_dir = tmp_path / "file"
-        not_a_dir.write_text("x")
-        config = write_config(tmp_path, not_a_dir, processed_data_dir)
-
-        with patch.object(process_data, "logger") as mock_logger:
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, config)
-
-        assert exc.value.code == 1
-        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
-
-    def test_missing_processed_data_dir_is_accepted(
-        self, monkeypatch, tmp_path: Path, raw_data_dir: Path
-    ):
-        missing_dir = tmp_path / "nope"
-        config = write_config(tmp_path, raw_data_dir, missing_dir)
-
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
-            run_main(monkeypatch, config)
-
-        dataset_config = mock_process.call_args.kwargs["dataset_config"]
-        assert dataset_config.processed_data_loc == missing_dir
-
-    def test_processed_data_loc_that_is_a_file_exits(
-        self, monkeypatch, tmp_path: Path, raw_data_dir: Path
-    ):
-        (raw_data_dir / "images.gz").touch()
-        not_a_dir = tmp_path / "file"
-        not_a_dir.write_text("x")
-        config = write_config(tmp_path, raw_data_dir, not_a_dir)
-
-        with patch.object(process_data, "logger") as mock_logger:
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, config)
-
-        assert exc.value.code == 1
-        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
-
-    def test_invalid_yaml_exits(self, monkeypatch, tmp_path: Path):
-        bad = tmp_path / "bad.yaml"
-        bad.write_text("name: [unclosed")
-
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, bad)
+                run_main(monkeypatch, TEST_DATASET_NAME)
 
         assert exc.value.code == 1
         mock_process.assert_not_called()
-
-    def test_unreadable_config_exits(self, monkeypatch, config_path: Path):
-        with patch("builtins.open", side_effect=PermissionError("denied")):
-            with patch.object(process_data, "process_mnist_dataset") as mock_process:
-                with pytest.raises(SystemExit) as exc:
-                    run_main(monkeypatch, config_path)
-
-        assert exc.value.code == 1
-        mock_process.assert_not_called()
+        message = mock_logger.error.call_args.args[0]
+        assert "Failed to process dataset" in message
+        assert "bad config" in message
 
     @pytest.mark.parametrize(
-        "contents",
+        "error",
         [
-            "name: test\n",  # missing mirrors and files
-            "name: test\nmirrors: []\nfiles: []\n",  # empty lists
-            "name: test\nmirrors: [https://x.com/]\nfiles:\n  - {label: a}\n",
-            "- just\n- a\n- list\n",  # wrong top-level type
+            ReadError("boom"),
+            WriteError("boom"),
+            ParseError("boom"),
+            InvalidFileError("boom"),
         ],
     )
-    def test_invalid_config_schema_exits(
-        self, monkeypatch, tmp_path: Path, contents: str
+    def test_processing_data_error_exits(
+        self,
+        monkeypatch,
+        mock_load: MagicMock,
+        mock_process: MagicMock,
+        error: Exception,
     ):
-        bad = tmp_path / "bad.yaml"
-        bad.write_text(contents)
+        mock_process.side_effect = error
 
-        with patch.object(process_data, "process_mnist_dataset") as mock_process:
+        with patch.object(process_data, "logger") as mock_logger:
             with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, bad)
+                run_main(monkeypatch, TEST_DATASET_NAME)
 
         assert exc.value.code == 1
-        mock_process.assert_not_called()
+        assert "Failed to process dataset" in mock_logger.error.call_args.args[0]
 
-    @pytest.mark.parametrize(
-        "exc_to_raise", [ParseError("boom"), FileNotFoundError("missing raw files")]
-    )
-    def test_processing_error_exits(
-        self, monkeypatch, config_path: Path, exc_to_raise: Exception
+    def test_missing_raw_files_exits(
+        self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
     ):
-        with patch.object(
-            process_data, "process_mnist_dataset", side_effect=exc_to_raise
-        ):
-            with pytest.raises(SystemExit) as exc:
-                run_main(monkeypatch, config_path)
+        mock_process.side_effect = FileNotFoundError("missing raw files")
 
-        assert exc.value.code == 1
-
-    def test_missing_raw_files_exits(self, monkeypatch, config_path: Path):
         with pytest.raises(SystemExit) as exc:
-            run_main(monkeypatch, config_path)
+            run_main(monkeypatch, TEST_DATASET_NAME)
 
         assert exc.value.code == 1
 
-    def test_missing_required_arguments_exits_with_usage_error(self, monkeypatch):
+    def test_unexpected_error_is_not_swallowed(
+        self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
+    ):
+        mock_process.side_effect = ValueError("bug")
+
+        with pytest.raises(ValueError, match="bug"):
+            run_main(monkeypatch, TEST_DATASET_NAME)
+
+    def test_missing_required_arguments_exits_with_usage_error(
+        self, monkeypatch, mock_load: MagicMock
+    ):
         with pytest.raises(SystemExit) as exc:
             run_main(monkeypatch)
 
         assert exc.value.code == 2
+        mock_load.assert_not_called()
+
+    def test_unknown_dataset_name_exits_with_usage_error(
+        self, monkeypatch, mock_load: MagicMock, mock_process: MagicMock
+    ):
+        with pytest.raises(SystemExit) as exc:
+            run_main(monkeypatch, "not-a-dataset")
+
+        assert exc.value.code == 2
+        mock_load.assert_not_called()
+        mock_process.assert_not_called()
+
+    def test_help_describes_command(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            run_main(monkeypatch, "--help")
+
+        help_text = capsys.readouterr().out
+        assert exc.value.code == 0
+        assert "processed_data_loc" in help_text
+        assert "--overwrite" in help_text
+        assert "Run download-data first" in help_text
+        assert "Example: process-data mnist" in help_text
