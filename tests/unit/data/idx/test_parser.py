@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 
 from neural_network.data.idx import parser
 from neural_network.data.idx.models import DataType, Header
-from neural_network.errors import InvalidFileError, ParseError
+from neural_network.errors import InvalidFileError, ParseError, ReadError
 
 
 DTYPE_CODES: dict[type[np.generic], tuple[int, DataType]] = {
@@ -71,7 +71,7 @@ class TestParseHeader:
     def test_unknown_data_type_raises_invalid_file_error(self, tmp_path: Path):
         idx = tmp_path / "a.idx"
         idx.write_bytes(b"\x00\x00\x01\x01" + (5).to_bytes(4, "big"))
-        with pytest.raises(InvalidFileError):
+        with pytest.raises(InvalidFileError, match="unknown data type code"):
             parser._parse_header(idx)
 
     @pytest.mark.parametrize(
@@ -91,9 +91,16 @@ class TestParseHeader:
         with pytest.raises(ParseError):
             parser._parse_header(idx)
 
-    def test_missing_file_raises_file_not_found_error(self, tmp_path: Path):
-        with pytest.raises(FileNotFoundError):
+    def test_missing_file_raises_read_error(self, tmp_path: Path):
+        with pytest.raises(ReadError, match="missing.idx") as exc:
             parser._parse_header(tmp_path / "missing.idx")
+        assert isinstance(exc.value.__cause__, FileNotFoundError)
+
+    def test_os_error_raises_read_error(self, tmp_path: Path):
+        idx = make_idx_file(tmp_path / "a.idx")
+        with patch("builtins.open", side_effect=OSError("boom")):
+            with pytest.raises(ReadError, match="boom"):
+                parser._parse_header(idx)
 
 
 class TestLoadData:
@@ -127,14 +134,28 @@ class TestLoadData:
         with pytest.raises(InvalidFileError):
             parser.load_data(idx)
 
-    def test_read_error_raises_parse_error(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "data_bytes",
+        [ARRAY.tobytes()[:-1], ARRAY.tobytes() + b"\x00", b""],
+        ids=["truncated", "extra_byte", "no_data"],
+    )
+    def test_data_not_matching_header_raises_invalid_file_error(
+        self, tmp_path: Path, data_bytes: bytes
+    ):
+        idx = tmp_path / "a.idx"
+        header_bytes = make_idx_bytes(ARRAY)[: -ARRAY.nbytes]
+        idx.write_bytes(header_bytes + data_bytes)
+        with pytest.raises(InvalidFileError, match="does not match its header"):
+            parser.load_data(idx)
+
+    def test_read_error_raises_read_error(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx")
         header = parser._parse_header(idx)
         with (
             patch.object(parser, "_parse_header", return_value=header),
             patch("builtins.open", side_effect=OSError("boom")),
         ):
-            with pytest.raises(ParseError):
+            with pytest.raises(ReadError, match="boom"):
                 parser.load_data(idx)
 
 
@@ -178,12 +199,22 @@ class TestParseSample:
         with pytest.raises(InvalidFileError):
             parser.parse_sample(idx, 0)
 
-    def test_read_error_raises_parse_error(self, tmp_path: Path):
+    def test_one_dimensional_sample_has_shape_one(self, tmp_path: Path):
+        idx = make_idx_file(tmp_path / "a.idx", LABELS)
+        assert parser.parse_sample(idx, 2).shape == (1,)
+
+    def test_truncated_sample_raises_invalid_file_error(self, tmp_path: Path):
+        idx = tmp_path / "a.idx"
+        idx.write_bytes(make_idx_bytes(ARRAY)[:-1])
+        with pytest.raises(InvalidFileError, match="does not match its header"):
+            parser.parse_sample(idx, 3)
+
+    def test_read_error_raises_read_error(self, tmp_path: Path):
         idx = make_idx_file(tmp_path / "a.idx")
         header = parser._parse_header(idx)
         with (
             patch.object(parser, "_parse_header", return_value=header),
             patch("builtins.open", side_effect=OSError("boom")),
         ):
-            with pytest.raises(ParseError):
+            with pytest.raises(ReadError, match="boom"):
                 parser.parse_sample(idx, 0)

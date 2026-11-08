@@ -10,6 +10,7 @@ from neural_network.config.data import DatasetConfig, FileInfo
 from neural_network.data import process
 from neural_network.errors import (
     InvalidFileError,
+    MissingFileError,
     ReadError,
     WriteError,
 )
@@ -141,11 +142,37 @@ class TestUnzipGzipFile:
         with pytest.raises(InvalidFileError, match="not a valid gzip file"):
             process._unzip_gzip_file(tmp_path / "missing.gz", tmp_path / "a.bin")
 
-    def test_bad_gzip_body_raises_read_error_and_cleans_up(self, tmp_path: Path):
+    def test_bad_gzip_body_raises_invalid_file_error_and_cleans_up(
+        self, tmp_path: Path
+    ):
         zipped = tmp_path / "a.gz"
         zipped.write_bytes(b"\x1f\x8b" + b"not really gzipped")
         out = tmp_path / "a.bin"
-        with pytest.raises(ReadError):
+        with pytest.raises(InvalidFileError, match="not a valid gzip file"):
+            process._unzip_gzip_file(zipped, out)
+        assert not out.exists()
+
+    def test_truncated_gzip_raises_invalid_file_error_and_cleans_up(
+        self, tmp_path: Path
+    ):
+        compressed = gzip.compress(CONTENT * 100)
+        zipped = tmp_path / "a.gz"
+        zipped.write_bytes(compressed[: len(compressed) // 2])
+        out = tmp_path / "a.bin"
+        with pytest.raises(InvalidFileError, match="not a valid gzip file") as exc:
+            process._unzip_gzip_file(zipped, out)
+        assert isinstance(exc.value.__cause__, EOFError)
+        assert not out.exists()
+
+    def test_corrupted_gzip_data_raises_invalid_file_error_and_cleans_up(
+        self, tmp_path: Path
+    ):
+        compressed = bytearray(gzip.compress(CONTENT * 100))
+        compressed[12:20] = b"\xff" * 8
+        zipped = tmp_path / "a.gz"
+        zipped.write_bytes(bytes(compressed))
+        out = tmp_path / "a.bin"
+        with pytest.raises(InvalidFileError, match="not a valid gzip file"):
             process._unzip_gzip_file(zipped, out)
         assert not out.exists()
 
@@ -224,6 +251,21 @@ class TestProcessMnistFile:
         with pytest.raises(InvalidFileError, match="not a valid gzip file"):
             process._process_mnist_file(not_zipped, tmp_path / "a.npy")
 
+    def test_truncated_idx_raises_invalid_file_error(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "a.gz", make_idx_bytes()[:-1])
+        out = tmp_path / "a.npy"
+        with pytest.raises(InvalidFileError, match="does not match its header"):
+            process._process_mnist_file(zipped, out)
+        assert not out.exists()
+
+    def test_temporary_directory_error_raises_write_error(self, tmp_path: Path):
+        zipped = make_gzip_file(tmp_path / "a.gz", make_idx_bytes())
+        with patch.object(
+            process.tempfile, "TemporaryDirectory", side_effect=OSError("no space")
+        ):
+            with pytest.raises(WriteError, match="no space"):
+                process._process_mnist_file(zipped, tmp_path / "a.npy")
+
 
 class TestProcessMnistDataset:
     def test_processes_every_file(self, raw_dir: Path, processed_dir: Path):
@@ -260,7 +302,7 @@ class TestProcessMnistDataset:
         (raw_dir / "images.gz").touch()
 
         with patch.object(process, "_process_mnist_file") as mock:
-            with pytest.raises(FileNotFoundError, match="labels.gz") as exc_info:
+            with pytest.raises(MissingFileError, match="labels.gz") as exc_info:
                 process.process_mnist_dataset(config)
 
         assert "images.gz" not in str(exc_info.value)
@@ -272,10 +314,18 @@ class TestProcessMnistDataset:
         processed = tmp_path / "new_processed"
         config = make_config(raw_dir, processed, ["images"])
 
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(MissingFileError):
             process.process_mnist_dataset(config)
 
         assert not processed.exists()
+
+    def test_missing_raw_files_error_is_a_read_error(
+        self, raw_dir: Path, processed_dir: Path
+    ):
+        config = make_config(raw_dir, processed_dir, ["images"])
+
+        with pytest.raises(ReadError):
+            process.process_mnist_dataset(config)
 
     @pytest.mark.parametrize("raw_is_file", [True, False])
     def test_unreadable_raw_dir_raises_read_error(

@@ -38,4 +38,4 @@ def delete_file(filepath: Path) -> None:
             logger.info(f"Deleted file at {filepath}")
     except OSError as ex:
         logger.warning(f"Error deleting file at {filepath}: {ex}")
-        raise DeleteError from ex
+        raise DeleteError(f"Error deleting file at {filepath}: {ex}") from ex

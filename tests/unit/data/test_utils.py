@@ -41,5 +41,6 @@ class TestDeleteFile:
         f = tmp_path / "a.bin"
         f.write_bytes(CONTENT)
         with patch.object(Path, "unlink", side_effect=PermissionError("nope")):
-            with pytest.raises(DeleteError):
+            with pytest.raises(DeleteError, match="nope") as exc:
                 delete_file(f)
+        assert isinstance(exc.value.__cause__, PermissionError)

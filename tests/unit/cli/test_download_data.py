@@ -6,7 +6,12 @@ import pytest
 from neural_network.cli import download_data
 from neural_network.config.data import DatasetConfig
 from neural_network.data.registry import DATASET_REGISTRY
-from neural_network.errors import DatasetConfigError, DownloadError, WriteError
+from neural_network.errors import (
+    DatasetConfigError,
+    DownloadError,
+    ReadError,
+    WriteError,
+)
 
 
 TEST_DATASET_NAME = "test-dataset"
@@ -104,7 +109,7 @@ class TestMain:
 
     @pytest.mark.parametrize(
         "error",
-        [DownloadError("boom"), WriteError("boom"), FileNotFoundError("boom")],
+        [DownloadError("boom"), WriteError("boom"), ReadError("boom")],
     )
     def test_download_error_exits(
         self,

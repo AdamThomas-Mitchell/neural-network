@@ -26,10 +26,12 @@ class BinaryReader:
             bytes: The n raw bytes from the binary stream
         """
         if n < 0:
+            logger.warning(f"Cannot read a negative number of bytes: {n}")
             raise ValueError(f"Cannot read a negative number of bytes: {n}")
 
         content: bytes = self._f.read(n)
         if len(content) != n:
+            logger.warning(f"Tried to read {n} bytes, only got {len(content)}")
             raise ParseError(f"Tried to read {n} bytes, only got {len(content)}")
 
         self._pos += n
