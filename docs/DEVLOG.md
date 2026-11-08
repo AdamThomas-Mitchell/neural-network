@@ -81,5 +81,9 @@ Made some good progress setting up claude code review. Seems to not quite be wor
 Got the data processing task completed. Merged dev into main. Defined two small tickets, properly scoped. Completed one. Working on the other smaller one to define a dataset registry now, rather than passing config files through the CLI. Wanna refine the CLI functions to not reoeat the loading of the config files.
 
 
+## 08/11/27
+Finished up the dataset registry stuff. Added a util function to load the config file so the cli functions aren't doing too much. There is some repitition between the process-data and download-data cli commands but I think poulling out the shared functionality would add complexity whcih isn't entirely necessary. Better to do a bit of repitition in this instance.
+
+
 ### Actions:
 - Properly configure MyPy pre-commit hook.
