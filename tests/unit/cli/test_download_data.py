@@ -9,6 +9,8 @@ from neural_network.data import download
 from neural_network.errors import DownloadError
 
 
+TEST_DATASET_NAME = "test-dataset"
+
 VALID_YAML = """
 name: test
 mirrors:
@@ -35,8 +37,9 @@ def config_path(tmp_path: Path, raw_data_dir: Path) -> Path:
     return path
 
 
-def run_main(monkeypatch: pytest.MonkeyPatch, *args: object) -> None:
-    monkeypatch.setattr("sys.argv", ["download-data", *map(str, args)])
+def run_main(monkeypatch: pytest.MonkeyPatch, config_path: Path, *flags: str) -> None:
+    monkeypatch.setitem(download_data.DATASET_REGISTRY, TEST_DATASET_NAME, config_path)
+    monkeypatch.setattr("sys.argv", ["download-data", TEST_DATASET_NAME, *flags])
     download_data.main()
 
 
@@ -159,7 +162,19 @@ class TestMain:
         assert exc.value.code == 1
 
     def test_missing_required_arguments_exits_with_usage_error(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["download-data"])
+
         with pytest.raises(SystemExit) as exc:
-            run_main(monkeypatch)
+            download_data.main()
 
         assert exc.value.code == 2
+
+    def test_unknown_dataset_name_exits_with_usage_error(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["download-data", "not-a-dataset"])
+
+        with patch.object(download_data, "download_dataset") as mock_download:
+            with pytest.raises(SystemExit) as exc:
+                download_data.main()
+
+        assert exc.value.code == 2
+        mock_download.assert_not_called()

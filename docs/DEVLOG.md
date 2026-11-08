@@ -77,7 +77,9 @@ Goal for next time: Set up Claude for code review.
 Made some good progress setting up claude code review. Seems to not quite be working on my current data preprocessing branch though. Need to look into that but done for now. Still need to be more disciplined about defining bite sized chunks of work and avoiding scope creep.
 
 
+## 02/11/27
+Got the data processing task completed. Merged dev into main. Defined two small tickets, properly scoped. Completed one. Working on the other smaller one to define a dataset registry now, rather than passing config files through the CLI. Wanna refine the CLI functions to not reoeat the loading of the config files.
+
+
 ### Actions:
 - Properly configure MyPy pre-commit hook.
-- Set up Claude code on GitHub to review PRs.
-- Tidy up GitHub project.

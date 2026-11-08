@@ -8,6 +8,8 @@ from neural_network.config.data import DatasetConfig
 from neural_network.errors import ParseError
 
 
+TEST_DATASET_NAME = "test-dataset"
+
 VALID_YAML = """
 name: test
 mirrors:
@@ -49,8 +51,9 @@ def config_path(tmp_path: Path, raw_data_dir: Path, processed_data_dir: Path) ->
     return write_config(tmp_path, raw_data_dir, processed_data_dir)
 
 
-def run_main(monkeypatch: pytest.MonkeyPatch, *args: object) -> None:
-    monkeypatch.setattr("sys.argv", ["process_data", *map(str, args)])
+def run_main(monkeypatch: pytest.MonkeyPatch, config_path: Path, *flags: str) -> None:
+    monkeypatch.setitem(process_data.DATASET_REGISTRY, TEST_DATASET_NAME, config_path)
+    monkeypatch.setattr("sys.argv", ["process_data", TEST_DATASET_NAME, *flags])
     process_data.main()
 
 
@@ -211,7 +214,19 @@ class TestMain:
         assert exc.value.code == 1
 
     def test_missing_required_arguments_exits_with_usage_error(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["process_data"])
+
         with pytest.raises(SystemExit) as exc:
-            run_main(monkeypatch)
+            process_data.main()
 
         assert exc.value.code == 2
+
+    def test_unknown_dataset_name_exits_with_usage_error(self, monkeypatch):
+        monkeypatch.setattr("sys.argv", ["process_data", "not-a-dataset"])
+
+        with patch.object(process_data, "process_mnist_dataset") as mock_process:
+            with pytest.raises(SystemExit) as exc:
+                process_data.main()
+
+        assert exc.value.code == 2
+        mock_process.assert_not_called()
