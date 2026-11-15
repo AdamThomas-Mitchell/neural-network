@@ -85,5 +85,5 @@ Got the data processing task completed. Merged dev into main. Defined two small 
 Finished up the dataset registry stuff. Added a util function to load the config file so the cli functions aren't doing too much. There is some repitition between the process-data and download-data cli commands but I think poulling out the shared functionality would add complexity whcih isn't entirely necessary. Better to do a bit of repitition in this instance.
 
 
-### Actions:
-- Properly configure MyPy pre-commit hook.
+## 15/11/27
+Maybe let's change direction. I think it's a good idea to first of all just get something working in a Jupyter Notebook, then I can incorporate it into the codebase properly.
