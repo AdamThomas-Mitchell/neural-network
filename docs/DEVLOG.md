@@ -87,3 +87,9 @@ Finished up the dataset registry stuff. Added a util function to load the config
 
 ## 15/11/27
 Maybe let's change direction. I think it's a good idea to first of all just get something working in a Jupyter Notebook, then I can incorporate it into the codebase properly.
+
+
+## 20/11/27
+Spent some time going through the mathematical representation of the forward pass. Coded up a neural network with forward propagation in a jupyter notebook, playing about to get a feel for dimensions etc. Feels more comfortable now. I'd like to play about with the forward pass using batches of samples, rather than one sample at a time. Then I'd like to focus on gradient descent before moving on to backpropagation. Claude has been useful in detailing the mathematical formulation of the forward pass thus far. Would also be a good idea to focus more on the theory for softmax activation.
+
+Should think about what convention I want to use when coding up my neural network properly. Think I've settled on column vectors for my convention. Tempted to fold the bias into the weights matrices for simplicity. Might be a good idea to create a `decisions_record.md` file in the docs for these kinds of things for future reference.
