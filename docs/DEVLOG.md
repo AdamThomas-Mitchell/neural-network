@@ -105,12 +105,15 @@ Ran through a worked example by hand and in Jupyter notebook for forward pass us
 
 Reading up on gradient descent and did some learning around that. Understand the principles, couldn't hurt to look into the mathematical derivation for multivariate functions in more detail though. Sufficient for now, I wanna move on. Implemented the function in the jupyter notebook, played about with a test function that I solved analytically to verify.
 
+Statred reading up on backpropagation. Will need to continue that before coding up the algorithm.
+
 
 
 ## Future dev ideas:
 - Ternary/binary weights - can remove matrix multiplication and rely on addition only.
 - Distributed training
 - GUI for weights/network visualisation
-- Muon optimiser
+- Muon optimiser, other SOTA optimisers
 - GELU and other SOTA activations
 - Hyperparameter tuning
+- Prune weights, reduce parameters
